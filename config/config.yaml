@@ -1,14 +1,20 @@
 paths:
-  data_dir: "data"
-  output_dir: "output"
-  logs_dir: "logs"
+  data: ${hydra:runtime.cwd}/data
+  output: ${hydra:runtime.cwd}/output
 
-processing:
-  batch_size: 64
-  num_workers: 4
-  use_gpu: false
+data:
+  predictions:
+    file_name: predictions_data.csv
+    encoding: utf-8
+    separator: ","
 
-logging:
-  level: "INFO"
-  format: "%(message)s"
-  rich_traceback: true
+  confidence:
+    file_name: confidence_degrees.csv
+    encoding: utf-8
+    separator: ","
+  
+  feature_vector:
+    folder: Featu
+
+settings:
+  verbose: false
