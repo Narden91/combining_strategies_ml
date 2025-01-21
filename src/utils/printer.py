@@ -66,8 +66,16 @@ class ConsolePrinter:
         """Print error message and stack trace."""
         self.console.print("\n[bold red]ERROR: An exception occurred[/]")
         self.console.print_exception()
-        
+    
     def print_spacer(self) -> None:
         """Print an empty line for spacing."""
         self.console.print()
+        
+    def print_warning(self, message: str) -> None:
+        """Print a warning message."""
+        self.console.print(f"⚠️ [bold yellow]Warning: {message}[/]")
+        
+    def print_info(self, message: str) -> None:
+        """Print an information message."""
+        self.console.print(f"ℹ️ [bold blue]{message}[/]")
 

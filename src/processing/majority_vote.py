@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 
-def majority_voting(predictions_df, confidence_df):
+def majority_voting(predictions_df, confidence_df, verbose=False):
     """
     Highly optimized majority voting implementation using NumPy vectorized operations.
     

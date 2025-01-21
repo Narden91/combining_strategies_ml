@@ -1,5 +1,3 @@
-# src/data_loader/loader.py
-
 import pandas as pd
 from pathlib import Path
 from omegaconf import DictConfig
@@ -23,7 +21,9 @@ class DataLoader:
             pd.DataFrame: Loaded predictions data
         """
         file_path = self.base_path / self.cfg.data.predictions.file_name
-        return self._load_data(file_path)
+        encoding = self.cfg.data.predictions.encoding
+        separator = self.cfg.data.predictions.separator
+        return self._load_data(file_path, encoding, separator)
 
     def load_confidence(self) -> pd.DataFrame:
         """
@@ -33,19 +33,42 @@ class DataLoader:
             pd.DataFrame: Loaded confidence data
         """
         file_path = self.base_path / self.cfg.data.confidence.file_name
-        return self._load_data(file_path)
+        encoding = self.cfg.data.confidence.encoding
+        separator = self.cfg.data.confidence.separator
+        return self._load_data(file_path, encoding, separator)
 
-    def _load_data(self, file_path: Path) -> pd.DataFrame:
+    def load_validation_accuracies(self) -> pd.DataFrame:
         """
-        Internal method to load data with default parameters.
+        Load validation accuracies data based on configuration.
+        
+        Returns:
+            pd.DataFrame: Loaded validation accuracies data
+        """
+        file_path = self.base_path / self.cfg.data.validation_acc.filename
+        encoding = self.cfg.data.validation_acc.encoding
+        separator = self.cfg.data.validation_acc.separator
+        
+        try:
+            # Read the CSV file
+            df = pd.read_csv(file_path, encoding=encoding, sep=separator, nrows=1)
+            return df
+            
+        except Exception as e:
+            raise Exception(f"Error loading validation accuracies from {file_path}: {str(e)}")
+
+    def _load_data(self, file_path: Path, encoding: str = 'utf-8', separator: str = ',') -> pd.DataFrame:
+        """
+        Internal method to load data with specified parameters.
         
         Args:
             file_path (Path): Path to the data file
+            encoding (str): File encoding
+            separator (str): CSV separator character
             
         Returns:
             pd.DataFrame: Loaded data
         """
         try:
-            return pd.read_csv(file_path)
+            return pd.read_csv(file_path, encoding=encoding, sep=separator)
         except Exception as e:
             raise Exception(f"Error loading data from {file_path}: {str(e)}")

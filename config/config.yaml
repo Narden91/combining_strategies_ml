@@ -15,7 +15,12 @@ data:
   
   feature_vector:
     folder: Feature_vector_file
+  
+  validation_acc:
+    filename: validation_accuracies.csv
+    encoding: utf-8
+    separator: ","
 
 settings:
   verbose: true
-  combining_technique: MV # MV, WMV, RK
+  combining_technique: WMV # MV, WMV, RK
