@@ -70,3 +70,4 @@ class ConsolePrinter:
     def print_spacer(self) -> None:
         """Print an empty line for spacing."""
         self.console.print()
+

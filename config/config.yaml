@@ -14,7 +14,8 @@ data:
     separator: ","
   
   feature_vector:
-    folder: Featu
+    folder: Feature_vector_file
 
 settings:
-  verbose: false
+  verbose: true
+  combining_technique: MV # MV, WMV, RK
