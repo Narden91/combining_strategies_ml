@@ -1,0 +1,14 @@
+paths:
+  data_dir: "data"
+  output_dir: "output"
+  logs_dir: "logs"
+
+processing:
+  batch_size: 64
+  num_workers: 4
+  use_gpu: false
+
+logging:
+  level: "INFO"
+  format: "%(message)s"
+  rich_traceback: true
