@@ -5,34 +5,28 @@ import numpy as np
 
 def majority_voting(predictions_df, confidence_df):
     """
-    Performs efficient majority voting on prediction columns using vectorized operations.
+    Highly optimized majority voting implementation using NumPy vectorized operations.
     
     Parameters:
     predictions_df (pandas.DataFrame): DataFrame containing prediction columns
-    confidence_df (pandas.DataFrame): DataFrame containing confidence scores
+    confidence_df (pandas.DataFrame): DataFrame containing confidence scores (not used in current implementation)
     
     Returns:
-    pandas.DataFrame: Original DataFrame with an additional 'predicted_class' column
+    pandas.DataFrame: Original DataFrame with additional 'predicted_class' column
     """
     print("[bold green]Executing Majority Voting[/bold green]")
     
-    # Get prediction columns (all except first and last)
-    pred_cols = predictions_df.columns[1:-1]
+    # Extract only prediction columns (no copy, just view)
+    X = predictions_df.iloc[:, 1:-1].to_numpy()
     
-    # Convert predictions to numpy array for faster computation
-    predictions_array = predictions_df[pred_cols].values
+    # Compute majority vote in a single vectorized operation
+    # mean >= 0.5 is equivalent to count of 1s > count of 0s
+    # This handles ties (equal counts) by choosing 1
+    majority_votes = (X.mean(axis=1) >= 0.5).astype(np.int8)
     
-    # Calculate row-wise counts of 0s and 1s using vectorized operations
-    counts_1 = np.sum(predictions_array == 1, axis=1)
-    counts_0 = predictions_array.shape[1] - counts_1  
-    
-    # Determine majority vote using vectorized comparison
-    # If counts are equal (tie), it will be True (1), matching original behavior
-    majority_votes = (counts_1 >= counts_0).astype(int)
-    
-    # Create result DataFrame
+    # Efficient DataFrame update without full copy
     result_df = predictions_df.copy()
-    result_df['predicted_class'] = majority_votes
+    result_df.loc[:, 'predicted_class'] = majority_votes
     
     print("\n[bold]Predictions Data:[/bold]")
     print(result_df)
