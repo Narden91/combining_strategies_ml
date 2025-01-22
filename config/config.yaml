@@ -23,4 +23,4 @@ data:
 
 settings:
   verbose: true
-  combining_technique: WMV # MV, WMV, RK
+  combining_technique: ERK  # Options: MV, WMV, RK, ERK (Entropy Ranking)

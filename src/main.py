@@ -11,15 +11,17 @@ from rich import print
 from processing.majority_vote import majority_voting
 from processing.weighted_majority_vote import weighted_majority_voting
 from processing.ranking import ranking
+from processing.entropy_ranking import entropy_ranking
 
 
 printer = ConsolePrinter()
 
 
 class CombiningMethod(Enum):
-    MV = "mv"
-    WMV = "wmv"
-    RK = "rk"
+    MV = "mv"     # Majority Voting
+    WMV = "wmv"   # Weighted Majority Voting
+    RK = "rk"     # Basic Ranking
+    ERK = "erk"   # Enhanced Ranking
 
     @classmethod
     def get_method(cls, method_str: str) -> 'CombiningMethod':
@@ -27,25 +29,13 @@ class CombiningMethod(Enum):
             return cls(method_str.lower())
         except ValueError:
             raise ValueError(f"Invalid combining method: {method_str}. Valid options are: {[m.value for m in cls]}")
- 
-        
+
 def execute_majority_voting(predictions_df, _, __, verbose):
-    """
-    Execute majority voting method.
-    Only uses predictions, ignores other parameters.
-    """
+    """Execute majority voting method."""
     return majority_voting(predictions_df, verbose=verbose)
 
-
 def execute_weighted_majority_voting(predictions_df, confidence_df, data_loader, verbose):
-    """
-    Execute weighted majority voting with both confidence scores and validation accuracies.
-    
-    Args:
-        predictions_df: DataFrame containing predictions
-        confidence_df: DataFrame containing confidence scores
-        data_loader: DataLoader instance for loading validation accuracies
-    """
+    """Execute weighted majority voting method."""
     try:
         validation_accuracies_df = data_loader.load_validation_accuracies()
         printer.print_info("Successfully loaded validation accuracies")
@@ -55,16 +45,19 @@ def execute_weighted_majority_voting(predictions_df, confidence_df, data_loader,
         printer.print_warning("Proceeding with confidence scores only")
         return weighted_majority_voting(predictions_df, confidence_df, verbose=verbose)
 
-
 def execute_ranking(predictions_df, confidence_df, _, verbose):
-    """Execute ranking method."""
+    """Execute basic ranking method."""
     return ranking(predictions_df, confidence_df, verbose)
 
+def execute_entropy_ranking(predictions_df, confidence_df, _, verbose):
+    """Execute enhanced ranking method."""
+    return entropy_ranking(predictions_df, confidence_df, verbose)
 
 METHOD_MAPPING: dict[CombiningMethod, Callable] = {
     CombiningMethod.MV: execute_majority_voting,
     CombiningMethod.WMV: execute_weighted_majority_voting,
-    CombiningMethod.RK: execute_ranking
+    CombiningMethod.RK: execute_ranking,
+    CombiningMethod.ERK: execute_entropy_ranking
 }
 
 

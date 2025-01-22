@@ -56,9 +56,15 @@ T1,T2,T3,T4,...
 - Handles both classes (0 and 1) properly by calculating weighted votes for each class
 - Usage: Set `combining_technique: WMV` in config
 
-### 3. Ranking-based Method (RK)
-- Ranking-based combination of predictions
+### 3. Ranking-based Methods
+
+#### 3.1 Basic Ranking (RK)
+The basic ranking method creates a matrix of common prediction errors between classifier pairs. It calculates diversity by examining how often classifiers make different mistakes, then combines this with validation accuracy using a fixed 50-50 weighting. The final ensemble is selected by choosing the top-performing classifiers based on their combined diversity-accuracy scores. The method uses simple majority voting for final predictions, making it computationally efficient but less adaptable to different dataset characteristics.
 - Usage: Set `combining_technique: RK` in config
+
+#### 3.2 Entropy-Based Ranking (ERK)
+This advanced method uses multiple diversity metrics (disagreement, correlation, Q-statistic, and double-fault) with weights that adapt based on prediction entropy. Higher entropy leads to more weight on complex measures, while lower entropy favors simpler ones. It employs a greedy selection algorithm that starts with the most confident classifier and iteratively adds members based on their marginal contribution to both diversity and confidence. The final prediction uses weighted voting based on classifier confidence scores.
+- Usage: Set `combining_technique: ERK` in config
 
 ## Configuration
 
@@ -86,7 +92,7 @@ data:
 
 settings:
   verbose: true
-  combining_technique: WMV  # Options: MV, WMV, RK
+  combining_technique: WMV  # Options: MV, WMV, RK, ERK
 ```
 
 ## Key Components
