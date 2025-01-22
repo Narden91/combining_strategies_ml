@@ -12,16 +12,18 @@ from processing.majority_vote import majority_voting
 from processing.weighted_majority_vote import weighted_majority_voting
 from processing.ranking import ranking
 from processing.entropy_ranking import entropy_ranking
+from processing.hill_climbing import hill_climbing_combine
 
 
 printer = ConsolePrinter()
 
 
 class CombiningMethod(Enum):
-    MV = "mv"     # Majority Voting
-    WMV = "wmv"   # Weighted Majority Voting
-    RK = "rk"     # Basic Ranking
-    ERK = "erk"   # Enhanced Ranking
+    MV = "mv"      # Majority Voting
+    WMV = "wmv"    # Weighted Majority Voting
+    RK = "rk"      # Basic Ranking
+    ERK = "erk"    # Entropy Ranking
+    HC = "hc"      # Hill Climbing
 
     @classmethod
     def get_method(cls, method_str: str) -> 'CombiningMethod':
@@ -53,11 +55,17 @@ def execute_entropy_ranking(predictions_df, confidence_df, _, verbose):
     """Execute enhanced ranking method."""
     return entropy_ranking(predictions_df, confidence_df, verbose)
 
+def execute_hill_climbing(predictions_df, confidence_df, _, verbose):
+    """Execute hill climbing method."""
+    return hill_climbing_combine(predictions_df, confidence_df, verbose)
+
+
 METHOD_MAPPING: dict[CombiningMethod, Callable] = {
     CombiningMethod.MV: execute_majority_voting,
     CombiningMethod.WMV: execute_weighted_majority_voting,
     CombiningMethod.RK: execute_ranking,
-    CombiningMethod.ERK: execute_entropy_ranking
+    CombiningMethod.ERK: execute_entropy_ranking,
+    CombiningMethod.HC: execute_hill_climbing
 }
 
 
