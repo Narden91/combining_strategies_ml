@@ -23,4 +23,4 @@ data:
 
 settings:
   verbose: true
-  combining_technique: HC  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC
+  combining_technique: MV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
