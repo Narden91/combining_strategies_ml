@@ -46,6 +46,41 @@ class SearchSpace:
         'p': [1, 2]
     }
 
+class ExtendedSearchSpace(SearchSpace):
+    """Extended search space including new classifiers."""
+    
+    xgb_space = {
+        'n_estimators': SearchSpace._create_randint(50, 300),
+        'max_depth': list(range(3, 11)),
+        'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
+        'subsample': SearchSpace._create_uniform(0.6, 1.0),
+        'colsample_bytree': SearchSpace._create_uniform(0.6, 1.0),
+        'min_child_weight': list(range(1, 7))
+    }
+    
+    catboost_space = {
+        'iterations': SearchSpace._create_randint(100, 500),
+        'depth': list(range(4, 11)),
+        'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
+        'l2_leaf_reg': SearchSpace._create_uniform(1.0, 10.0),
+        'subsample': SearchSpace._create_uniform(0.6, 1.0)
+    }
+    
+    dt_space = {
+        'max_depth': [None] + list(range(5, 31, 5)),
+        'min_samples_split': SearchSpace._create_randint(2, 11),
+        'min_samples_leaf': SearchSpace._create_randint(1, 5),
+        'criterion': ['gini', 'entropy']
+    }
+    
+    adaboost_space = {
+        'n_estimators': SearchSpace._create_randint(50, 300),
+        'learning_rate': SearchSpace._create_uniform(0.01, 2.0),
+        'algorithm': ['SAMME', 'SAMME.R']
+    }
+
+
+
 class HalvingRandomSearch:
     """Implement Halving Random Search for efficient hyperparameter tuning."""
     

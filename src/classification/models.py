@@ -1,12 +1,16 @@
 from pathlib import Path
+import catboost
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier as SklearnRF
 from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from classification.base import BaseClassifier
-from classification.tuning import TunedClassifierMixin, SearchSpace
+from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+from classification.tuning import ExtendedSearchSpace, TunedClassifierMixin, SearchSpace
 import warnings
 
 
@@ -180,13 +184,115 @@ class KNNClassifier(TunedClassifierMixin, BaseClassifier):
     def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict_proba(X)
 
+class XGBoostClassifier(TunedClassifierMixin, BaseClassifier):
+    """XGBoost classifier implementation with hyperparameter tuning."""
+    
+    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, output_dir, random_state)
+        self.model = XGBClassifier(
+            random_state=random_state,
+            eval_metric='logloss' 
+        )
+        self.verbose = verbose
+    
+    def get_classifier_name(self) -> str:
+        return "xgboost"
+    
+    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.tune_hyperparameters(X, y, ExtendedSearchSpace.xgb_space, verbose=self.verbose)
+        self.model.fit(X, y)
+    
+    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X)
+    
+    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict_proba(X)
+    
+    
+class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
+    """CatBoost classifier implementation with hyperparameter tuning."""
+    
+    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, output_dir, random_state)
+        self.model = catboost.CatBoostClassifier(  # Use fully qualified name
+            random_state=random_state,
+            verbose=False  # Disable logging output
+        )
+        self.verbose = verbose
+    
+    def get_classifier_name(self) -> str:
+        return "catboost"
+    
+    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.tune_hyperparameters(X, y, ExtendedSearchSpace.catboost_space, verbose=self.verbose)
+        self.model.fit(X, y)
+    
+    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X)
+    
+    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict_proba(X)
+    
+
+class DecisionTreeClassifier(TunedClassifierMixin, BaseClassifier):
+    """Decision Tree classifier implementation with hyperparameter tuning."""
+    
+    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, output_dir, random_state)
+        self.model = sklearn.tree.DecisionTreeClassifier(random_state=random_state)
+        self.verbose = verbose
+    
+    def get_classifier_name(self) -> str:
+        return "decision_tree"
+    
+    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.tune_hyperparameters(X, y, ExtendedSearchSpace.dt_space, verbose=self.verbose)
+        self.model.fit(X, y)
+    
+    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X)
+    
+    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict_proba(X)
+
+class AdaBoostClassifier(TunedClassifierMixin, BaseClassifier):
+    """AdaBoost classifier implementation with hyperparameter tuning."""
+    
+    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, output_dir, random_state)
+        # Use the fully qualified scikit-learn AdaBoost classifier
+        self.model = sklearn.ensemble.AdaBoostClassifier(random_state=random_state)
+        self.verbose = verbose
+    
+    def get_classifier_name(self) -> str:
+        return "adaboost"
+    
+    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.tune_hyperparameters(X, y, ExtendedSearchSpace.adaboost_space, verbose=self.verbose)
+        self.model.fit(X, y)
+    
+    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X)
+    
+    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict_proba(X)
+    
+    
 def get_classifier(classifier_type: str, task_id: str, output_dir: Path, 
                   random_state: int = 42, verbose: bool = False) -> BaseClassifier:
     """
     Factory function to get classifier instance.
     
     Args:
-        classifier_type: Type of classifier ('svm', 'rf', 'nn', or 'knn')
+        classifier_type: Type of classifier ('svm', 'rf', 'nn', 'knn', 'xgb', 'catboost', 'dt', 'ada')
         task_id: Task identifier
         output_dir: Output directory for results
         random_state: Random seed for reproducibility
@@ -202,7 +308,11 @@ def get_classifier(classifier_type: str, task_id: str, output_dir: Path,
         'svm': SVMClassifier,
         'rf': RFClassifier,
         'nn': NeuralNetworkClassifier,
-        'knn': KNNClassifier
+        'knn': KNNClassifier,
+        'xgb': XGBoostClassifier,
+        'catboost': CatBoostClassifier,
+        'dt': DecisionTreeClassifier,
+        'ada': AdaBoostClassifier
     }
     
     if classifier_type not in classifiers:
