@@ -137,7 +137,7 @@ class EnsemblePipeline:
         all_predictions = []
         all_probabilities = []
         
-        # Get classifier instance to access its name
+        # Get classifier instance to access its name and configuration
         classifier = get_classifier(
             self.config.classification.classifier,
             tasks[0],  # Use first task to get classifier type
@@ -145,6 +145,10 @@ class EnsemblePipeline:
             self.config.classification.base_seed
         )
         classifier_name = classifier.get_classifier_name()
+        
+        # Create output path with classifier-specific subfolder
+        classifier_output_path = output_dir / "aggregated" / classifier_name
+        classifier_output_path.mkdir(parents=True, exist_ok=True)
         
         for task_id in tasks:
             task_predictions = []
@@ -167,18 +171,46 @@ class EnsemblePipeline:
             all_predictions.append(avg_predictions)
             all_probabilities.append(avg_probabilities)
         
-        # Get true labels using classifier name instead of manager
+        # Get true labels using classifier name
         true_labels = np.load(
             output_dir / classifier_name / 
             f"task_{tasks[0]}/run_0/true_labels.npy"
         )
         
-        return self._create_result_dataframes(
+        # Create result dataframes
+        pred_df, conf_df = self._create_result_dataframes(
             all_predictions,
             all_probabilities,
             true_labels,
             len(tasks)
         )
+        
+        # Generate filenames with classifier configuration
+        config_str = self._get_classifier_config_string()
+        
+        pred_filename = f"aggregated_predictions_{classifier_name}_{config_str}.csv"
+        conf_filename = f"aggregated_confidences_{classifier_name}_{config_str}.csv"
+        
+        # Save to classifier-specific directory
+        pred_df.to_csv(classifier_output_path / pred_filename, index=False)
+        conf_df.to_csv(classifier_output_path / conf_filename, index=False)
+        
+        if self.verbose:
+            self.printer.print_info(f"Saved aggregated results for {classifier_name}:")
+            self.printer.print_info(f"- {pred_filename}")
+            self.printer.print_info(f"- {conf_filename}")
+        
+        return pred_df, conf_df
+
+    def _get_classifier_config_string(self) -> str:
+        """Generate a string representing classifier configuration."""
+        config = self.config.classification
+        parts = [
+            f"runs_{config.n_runs}",
+            f"seed_{config.base_seed}",
+            f"test_{int(config.test_size * 100)}pct"
+        ]
+        return "_".join(parts)
     
     def _create_result_dataframes(
         self,
