@@ -127,3 +127,15 @@ The system handles various error cases:
 - Invalid data formats
 - Configuration errors
 - Runtime errors with informative messages
+
+
+| **Aspect**                | **Enhanced Entropy Ranking**                          | **Normal Ranking**                        |
+|---------------------------|------------------------------------------------------|-------------------------------------------|
+| **Task Selection Method** | Greedy algorithm based on diversity + confidence     | Fixed rule (top 50%, min 3, max 10)       |
+| **Diversity Metrics**     | Multiple metrics (disagreement, correlation, kappa, double-fault) | Simple disagreement count                |
+| **Weights**               | Dynamic weights based on entropy and data characteristics | Fixed weights (diversity_weight = 0.5)    |
+| **Task Selection**        | Adaptive ensemble size based on score distribution   | Limited to top-performing tasks           |
+| **Flexibility**           | Highly flexible, adapts to data and score differences | Less flexible, follows fixed rules        |
+| **Confidence Handling**   | Considers both mean confidence and stability         | Uses mean confidence only                 |
+| **Ensemble Size**         | Adaptive size based on score differences (e.g., 3-7) | Fixed size (top 50%, min 3, max 10)       |
+| **Prediction Method**     | Weighted voting based on confidence and stability    | Simple majority voting                    |
