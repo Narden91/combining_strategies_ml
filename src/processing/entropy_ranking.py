@@ -184,13 +184,23 @@ class EntropyRanking:
         predictions = self.predictions_df[selected_tasks].values
         
         if self.confidence_df is not None:
-            conf_cols = [f"Cd1_{task.replace('T', '')}" for task in selected_tasks]
-            weights = self.confidence_df[conf_cols].mean().values
-            weights = weights / weights.sum()
-            weighted_votes = np.average(predictions, axis=1, weights=weights)
-            return (weighted_votes >= 0.5).astype(int)
-        else:
-            return pd.Series(np.mean(predictions, axis=1) >= 0.5).astype(int)
+            # Fix: Use the correct confidence column names that match with the DataFrame
+            conf_cols = []
+            for task in selected_tasks:
+                task_num = task.replace('T', '')
+                conf_col = next((col for col in self.confidence_df.columns 
+                            if col.endswith(f'T{task_num}')), None)
+                if conf_col:
+                    conf_cols.append(conf_col)
+            
+            if conf_cols:
+                weights = self.confidence_df[conf_cols].mean().values
+                weights = weights / weights.sum()
+                weighted_votes = np.average(predictions, axis=1, weights=weights)
+                return (weighted_votes >= 0.5).astype(int)
+        
+        # Fallback to simple average if no confidence scores available
+        return pd.Series(np.mean(predictions, axis=1) >= 0.5).astype(int)
 
 def entropy_ranking(predictions_df: pd.DataFrame, confidence_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     """

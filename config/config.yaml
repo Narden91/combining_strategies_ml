@@ -23,10 +23,10 @@ data:
 
 settings:
   verbose: true
-  combining_technique: MV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
+  combining_technique: ERK  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
 
 classification:
-  enabled: false          # Whether to run classification before ensemble
+  enabled: true          # Whether to run classification before ensemble
   classifier: rf          # Options: svm, rf, nn, knn
   test_size: 0.2         # Proportion of data to use for testing
   n_runs: 2             # Number of runs with different seeds
