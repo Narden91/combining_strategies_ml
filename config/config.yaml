@@ -22,7 +22,7 @@ data:
     separator: ","
 
 settings:
-  verbose: true
+  verbose: false
   combining_technique: MV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
 
 classification:

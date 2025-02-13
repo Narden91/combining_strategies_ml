@@ -65,11 +65,12 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_directory_creation(path_name, path_value)
     
-    def run_classification(self, run:int) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def run_classification(self, run:int, seed:int) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run the classification phase.
 
         Args:
             run (int): run number
+            seed (int): random seed
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame]: dataframes with predictions and confidences
         """
@@ -91,7 +92,7 @@ class EnsemblePipeline:
             feature_vector_path,
             classification_output,
             n_runs=self.config.classification.n_runs,
-            base_seed=self.config.classification.base_seed
+            base_seed=seed
         )
 
         aggregated_predictions = {}  # Store predictions per task
@@ -107,44 +108,40 @@ class EnsemblePipeline:
                 progress.update(task, description=f"[cyan]Processing {task_id}...")
 
                 # Load dataset
-                X, y, id_column = manager.load_task_data(csv_file.stem)
-
+                # X, y, id_column = manager.load_task_data(csv_file.stem)
+                X, y = manager.load_task_data(csv_file.stem)
+                
                 if X.empty or y.empty:
                     self.printer.print_warning(f"Task {task_id} has no valid data. Skipping.")
                     raise ValueError(f"Task {task_id} has no valid data.")
 
-                # Store original class labels (assumed consistent across tasks)
-                if original_classes is None:
-                    original_classes = y.rename("Class")  # Rename for clarity
+                # # Store original class labels (assumed consistent across tasks)
+                # if original_classes is None:
+                #     original_classes = y.rename("Class")  # Rename for clarity
 
                 classifier = get_classifier(
                     self.config.classification.classifier,
                     task_id,
                     classification_output,
-                    self.config.classification.base_seed
-                )
+                    seed)
 
                 # Train classifier
-                classifier.fit(X, y)
-                y_pred = classifier.predict(X)
+                classifier, y_pred, y_proba, id_col_test, y_test = manager.train_classifier(classifier, X, y,
+                                                                                       test_size=self.config.classification.test_size,
+                                                                                       seed=seed)
+                
+                # Store original class labels (assumed consistent across tasks)
+                if original_classes is None:
+                    original_classes = pd.DataFrame({"Id": id_col_test, "Class": y_test})  # Ensure DataFrame format
 
-                try:
-                    y_proba = classifier.predict_proba(X)
-                    if y_proba.ndim == 1:
-                        y_proba = np.column_stack((1 - y_proba, y_proba))  # Convert to (n_samples, 2)
-                except AttributeError:
-                    # Some classifiers (like SVM with linear kernel) don't support `predict_proba`
-                    y_proba = np.zeros((len(y_pred), 2))  # Placeholder
-                    y_proba[:, 1] = y_pred  # Assign predicted values
-                    y_proba[:, 0] = 1 - y_pred  # Invert to simulate probabilities
-
-                predictions_df = pd.DataFrame({"Id": id_column, f"{task_id}": y_pred})
+                
+                predictions_df = pd.DataFrame({"Id": id_col_test, f"{task_id}": y_pred})
                 confidences_df = pd.DataFrame({
-                    "Id": id_column,
+                    "Id": id_col_test,
                     f"Cd_0_{task_id}": y_proba[:, 0],
                     f"Cd_1_{task_id}": y_proba[:, 1]
                 })
-
+                
                 aggregated_predictions[task_id] = predictions_df
                 aggregated_confidences[task_id] = confidences_df
 
@@ -158,19 +155,25 @@ class EnsemblePipeline:
         final_confidences_df = pd.DataFrame()
 
         for task_id, df in aggregated_predictions.items():
+            df.sort_values(by="Id", inplace=True)  # Ensure consistent ordering
             if final_predictions_df.empty:
                 final_predictions_df = df
             else:
                 final_predictions_df = final_predictions_df.merge(df, on="Id", how="outer")
 
         for task_id, df in aggregated_confidences.items():
+            df.sort_values(by="Id", inplace=True)  # Ensure consistent ordering
             if final_confidences_df.empty:
                 final_confidences_df = df
             else:
                 final_confidences_df = final_confidences_df.merge(df, on="Id", how="outer")
+                final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
 
         # Add original class column
-        final_predictions_df = final_predictions_df.merge(original_classes, left_index=True, right_index=True, how="outer")
+        if "Id" in original_classes.columns:
+            final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
+        else:
+            print("Warning: 'Id' column missing from original_classes")
 
         # Save final DataFrames
         # output_path_predictions = classification_output / f"{classifier.get_classifier_name()}_predictions.csv"
@@ -197,7 +200,8 @@ class EnsemblePipeline:
     def _process_classification_tasks(
         self,
         manager: ClassificationManager,
-        feature_vector_path: Path
+        feature_vector_path: Path,
+        seed: int
     ) -> List[str]:
         """Process individual classification tasks."""
         tasks = get_available_tasks(feature_vector_path)
@@ -225,7 +229,8 @@ class EnsemblePipeline:
             metrics = manager.train_classifier(
                 classifier,
                 X, y,
-                test_size=self.config.classification.test_size
+                test_size=self.config.classification.test_size,
+                seed=seed
             )
             
             if self.verbose:
@@ -429,6 +434,28 @@ class EnsemblePipeline:
             self.printer.print_info("Results saved as:")
             self.printer.print_info(f"- {predictions_file}")
             self.printer.print_info(f"- {metrics_file}")
+            
+    def save_results_clf_ensemble(
+        self,
+        result_df: pd.DataFrame,
+        metrics: Dict,
+        clf_output: Path,
+        run: int
+    ) -> None:
+        """Save ensemble results and metrics."""
+        output_path = Path(clf_output) / "ensemble_output"
+        output_path.mkdir(exist_ok=True)
+        
+        predictions_file = self._generate_output_filename_classification("predictions", run=run)
+        metrics_file = self._generate_output_filename_classification("metrics", run=run)
+        
+        result_df.to_csv(output_path / predictions_file, index=False)
+        pd.DataFrame([metrics]).to_csv(output_path / metrics_file, index=False)
+        
+        if self.verbose:
+            self.printer.print_info("Results saved as:")
+            self.printer.print_info(f"- {predictions_file}")
+            self.printer.print_info(f"- {metrics_file}")
     
     def _generate_output_filename(self, suffix: str) -> str:
         """Generate detailed output filename."""
@@ -438,6 +465,18 @@ class EnsemblePipeline:
             parts.extend([
                 f"clf_{self.config.classification.classifier}",
                 f"runs_{self.config.classification.n_runs}"
+            ])
+        
+        parts.append(suffix)
+        return "_".join(parts) + ".csv"
+    
+    def _generate_output_filename_classification(self, suffix: str, run: int) -> str:
+        """Generate detailed output filename."""
+        parts = [f"ensemble_{self.ensemble_method.value}"]
+        
+        if self.config.classification.enabled:
+            parts.extend([
+                f"run_{run + 1}",
             ])
         
         parts.append(suffix)

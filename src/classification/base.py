@@ -194,13 +194,13 @@ class ClassificationManager:
 
         df = pd.read_csv(file_path)
 
-        # Identify the ID column (e.g., 'id', 'Id', etc.) and store it separately
-        possible_id_columns = [col for col in df.columns if "id" in col.lower()]
-        id_col = None
-        if possible_id_columns:
-            id_col_name = possible_id_columns[0]
-            id_col = df[id_col_name].copy()  # Keep a copy
-            df.drop(columns=possible_id_columns, inplace=True)
+        # # Identify the ID column (e.g., 'id', 'Id', etc.) and store it separately
+        # possible_id_columns = [col for col in df.columns if "id" in col.lower()]
+        # id_col = None
+        # if possible_id_columns:
+        #     id_col_name = possible_id_columns[0]
+        #     id_col = df[id_col_name].copy()  # Keep a copy
+        #     df.drop(columns=possible_id_columns, inplace=True)
 
         # Identify the correct class column (e.g., 'class', 'Class', 'label', 'Label')
         possible_class_columns = [col for col in df.columns if col.lower() in ["class", "label"]]
@@ -213,7 +213,8 @@ class ClassificationManager:
         y = df[class_column].copy()
         X = df.drop(columns=[class_column])  # Drop the identified class column from features
 
-        return X, y, id_col
+        return X, y
+        # return X, y, id_col
 
         
     def stratified_split(self, X: pd.DataFrame, y: pd.Series, 
@@ -249,58 +250,113 @@ class ClassificationManager:
         # Use stratified split if we have enough samples
         return train_test_split(X, y, test_size=test_size, 
                               stratify=y, random_state=random_state)
-        
+    
+    
     def train_classifier(self, classifier: BaseClassifier, X: pd.DataFrame, 
-                        y: pd.Series, test_size: float = 0.2) -> Dict:
+                     y: pd.Series, test_size: float, seed: int) -> Dict:
         """
-        Train a classifier with multiple runs and return aggregated results.
+        Train a classifier with a given seed and return results.
         
         Args:
             classifier: Classifier instance to train
             X: Training features
             y: Training labels
+            id_column: ID column for the dataset
             test_size: Proportion of data to use for testing
+            seed: Random seed for reproducibility
             
         Returns:
-            Dictionary of aggregated performance metrics
+            Dictionary of performance metrics and predictions
         """
-        aggregated_metrics = []
-        final_predictions = []
-        final_probabilities = []
-        final_true_labels = []
+        # Ensure column names are consistent
+        X.columns = X.columns.str.strip()
+        X_train, X_test, y_train, y_test = self.stratified_split(X, y, test_size, seed)
+        
+        # Identify the ID column (e.g., 'id', 'Id', etc.) and store it separately
+        possible_id_columns = [col for col in X_train.columns if "id" in col.lower()]
+        id_col = None
+        if possible_id_columns:
+            id_col_name = possible_id_columns[0]
+            id_col = X_test[id_col_name].copy()  # Keep a copy
+            X_train.drop(columns=possible_id_columns, inplace=True)
+            X_test.drop(columns=possible_id_columns, inplace=True)
 
-        for run in range(self.n_runs):
-            run_seed = self.base_seed + run
+        # Re-align column order in test set with train set
+        X_test = X_test[X_train.columns]
 
-            # Ensure column names are consistent
-            X.columns = X.columns.str.strip()
-            X_train, X_test, y_train, y_test = self.stratified_split(X, y, test_size, run_seed)
+        classifier.random_state = seed
+        classifier.fit(X_train, y_train)
+        
+        y_pred = classifier.predict(X_test)
 
-            # Re-align column order in test set with train set
-            X_test = X_test[X_train.columns]
+        # Ensure prediction data retains feature names
+        # X_test_df = pd.DataFrame(X_test, columns=X_train.columns)
+        # y_test = y_test.values
+        
+        try:
+            y_proba = classifier.predict_proba(X_test)
+            if y_proba.ndim == 1:
+                y_proba = np.column_stack((1 - y_proba, y_proba))  # Convert to (n_samples, 2)
+        except AttributeError:
+            # Some classifiers (like SVM with linear kernel) don't support predict_proba
+            y_proba = np.zeros((len(y_pred), 2))  # Placeholder
+            y_proba[:, 1] = y_pred  # Assign predicted values
+            y_proba[:, 0] = 1 - y_pred  # Invert to simulate probabilities
 
-            classifier.random_state = run_seed
-            classifier.fit(X_train, y_train)
+        return classifier, y_pred, y_proba, id_col, y_test
 
-            # 🔹 Ensure prediction data retains feature names
-            X_test_df = pd.DataFrame(X_test, columns=X_train.columns)
+    
+    # def train_classifier(self, classifier: BaseClassifier, X: pd.DataFrame, 
+    #                     y: pd.Series, test_size: float = 0.2) -> Dict:
+    #     """
+    #     Train a classifier with multiple runs and return aggregated results.
+        
+    #     Args:
+    #         classifier: Classifier instance to train
+    #         X: Training features
+    #         y: Training labels
+    #         test_size: Proportion of data to use for testing
+            
+    #     Returns:
+    #         Dictionary of aggregated performance metrics
+    #     """
+    #     aggregated_metrics = []
+    #     final_predictions = []
+    #     final_probabilities = []
+    #     final_true_labels = []
 
-            y_pred = classifier.predict(X_test_df)
-            y_prob = classifier.predict_proba(X_test_df)
+    #     for run in range(self.n_runs):
+    #         run_seed = self.base_seed + run
 
-            classifier.save_run_results(run, {}, y_pred, y_prob, y_test.values)
+    #         # Ensure column names are consistent
+    #         X.columns = X.columns.str.strip()
+    #         X_train, X_test, y_train, y_test = self.stratified_split(X, y, test_size, run_seed)
 
-            aggregated_metrics.append({'accuracy': np.mean(y_pred == y_test), 'run_id': run, 'seed': run_seed})
-            final_predictions.append(y_pred)
-            final_probabilities.append(y_prob)
-            final_true_labels.append(y_test.values)
+    #         # Re-align column order in test set with train set
+    #         X_test = X_test[X_train.columns]
 
-        return {
-            'metrics': {'mean_accuracy': np.mean([m['accuracy'] for m in aggregated_metrics])},
-            'predictions': final_predictions,
-            'probabilities': final_probabilities,
-            'true_labels': final_true_labels
-        }
+    #         classifier.random_state = run_seed
+    #         classifier.fit(X_train, y_train)
+
+    #         # 🔹 Ensure prediction data retains feature names
+    #         X_test_df = pd.DataFrame(X_test, columns=X_train.columns)
+
+    #         y_pred = classifier.predict(X_test_df)
+    #         y_prob = classifier.predict_proba(X_test_df)
+
+    #         classifier.save_run_results(run, {}, y_pred, y_prob, y_test.values)
+
+    #         aggregated_metrics.append({'accuracy': np.mean(y_pred == y_test), 'run_id': run, 'seed': run_seed})
+    #         final_predictions.append(y_pred)
+    #         final_probabilities.append(y_prob)
+    #         final_true_labels.append(y_test.values)
+
+    #     return {
+    #         'metrics': {'mean_accuracy': np.mean([m['accuracy'] for m in aggregated_metrics])},
+    #         'predictions': final_predictions,
+    #         'probabilities': final_probabilities,
+    #         'true_labels': final_true_labels
+    #     }
 
 def get_available_tasks(data_path: Path) -> List[str]:
     """

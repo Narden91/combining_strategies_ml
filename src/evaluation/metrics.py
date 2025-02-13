@@ -86,9 +86,21 @@ def evaluate_predictions(predictions_df: pd.DataFrame, verbose: bool = False) ->
     Returns:
         Tuple containing confusion matrix and metrics dictionaries
     """
+    # Possible column names for the ground truth
+    possible_true_cols = ["class", "Class", "true_class", "True_Class", "actual_label", "Actual_Label"]
+    # Possible column names for the prediction
+    possible_pred_cols = ["predicted_class", "Predicted_Class", "prediction", "Prediction", "predicted", "Pred"]
+
+    # Find matching columns in the DataFrame
+    found_true_col = next((col for col in possible_true_cols if col in predictions_df.columns), None)
+    found_pred_col = next((col for col in possible_pred_cols if col in predictions_df.columns), None)
+
+    if not found_true_col or not found_pred_col:
+        raise ValueError("Could not find the required columns in the DataFrame.")
+
     evaluator = EvaluationMetrics(
-        predictions_df['class'].values,
-        predictions_df['predicted_class'].values
+        predictions_df[found_true_col].values,
+        predictions_df[found_pred_col].values
     )
     
     confusion = evaluator.get_confusion_matrix()
