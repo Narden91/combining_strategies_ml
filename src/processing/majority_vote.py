@@ -21,8 +21,10 @@ def majority_voting(predictions_df, verbose=False):
     """
     print("[bold green]Executing Majority Voting[/bold green]")
     
+    print(predictions_df)
+    
     # Select only the columns corresponding to tasks.
-    task_columns = [col for col in predictions_df.columns if col.startswith("TASK_")]
+    task_columns = [col for col in predictions_df.columns if col.startswith("T")]
     # Convert the selected columns to a NumPy array.
     X = predictions_df[task_columns].to_numpy()
     
