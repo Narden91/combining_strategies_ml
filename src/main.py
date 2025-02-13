@@ -24,27 +24,25 @@ def main(cfg: DictConfig) -> None:
         
         pipeline.setup_directories()
         
-        # Handle classification or load existing data
-        if cfg.classification.enabled:
-            predictions_df, confidence_df = pipeline.run_classification()
+        for run in range(cfg.classification.n_runs):
+            printer.print_header(f"Performing run: {run + 1}")
+                
+            # Handle classification or load existing data
+            if cfg.classification.enabled:
+                predictions_df, confidence_df, output_clf = pipeline.run_classification(run)
+                return
+            else:
+                predictions_df, confidence_df = pipeline.load_data()
+        
+            # Execute ensemble method and evaluate results
+            result_df = pipeline.execute_ensemble_method(predictions_df, confidence_df)
+            confusion_matrix, metrics = evaluate_predictions(result_df, cfg.settings.verbose)
             
-            # Save aggregated classification results
-            output_path = Path(cfg.paths.output) / "classification_output" / "aggregated"
-            output_path.mkdir(exist_ok=True)
-            predictions_df.to_csv(output_path / "aggregated_predictions.csv", index=False)
-            confidence_df.to_csv(output_path / "aggregated_confidences.csv", index=False)
-        else:
-            predictions_df, confidence_df = pipeline.load_data()
-        
-        # Execute ensemble method and evaluate results
-        result_df = pipeline.execute_ensemble_method(predictions_df, confidence_df)
-        confusion_matrix, metrics = evaluate_predictions(result_df, cfg.settings.verbose)
-        
-        # Save results
-        pipeline.save_results(result_df, metrics)
-        
-        printer.print_footer(success=True)
-        return 0
+            # Save results
+            pipeline.save_results(result_df, metrics)
+            
+            printer.print_footer(success=True)
+            return 0
         
     except Exception as e:
         printer.print_error(e)

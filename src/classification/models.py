@@ -29,32 +29,32 @@ class SVMClassifier(TunedClassifierMixin, BaseClassifier):
     """
     
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        """
-        Initialize SVM classifier.
-        
-        Args:
-            task_id: Identifier for the specific task
-            output_dir: Directory for saving outputs
-            random_state: Random seed for reproducibility
-            verbose: Whether to print detailed information
-        """
         super().__init__(task_id, output_dir, random_state)
         self.model = SVC(probability=True, random_state=random_state)
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "svm"
-        
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, SearchSpace.svm_space, verbose=self.verbose)
         self.model.fit(X, y)
-        
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-        
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
 
 class RFClassifier(TunedClassifierMixin, BaseClassifier):
@@ -72,32 +72,32 @@ class RFClassifier(TunedClassifierMixin, BaseClassifier):
     """
     
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        """
-        Initialize Random Forest classifier.
-        
-        Args:
-            task_id: Identifier for the specific task
-            output_dir: Directory for saving outputs
-            random_state: Random seed for reproducibility
-            verbose: Whether to print detailed information
-        """
         super().__init__(task_id, output_dir, random_state)
         self.model = SklearnRF(random_state=random_state)
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "random_forest"
-        
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, SearchSpace.rf_space, verbose=self.verbose)
         self.model.fit(X, y)
-        
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-        
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
 
 class NeuralNetworkClassifier(TunedClassifierMixin, BaseClassifier):
@@ -114,32 +114,32 @@ class NeuralNetworkClassifier(TunedClassifierMixin, BaseClassifier):
     """
     
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        """
-        Initialize Neural Network classifier.
-        
-        Args:
-            task_id: Identifier for the specific task
-            output_dir: Directory for saving outputs
-            random_state: Random seed for reproducibility
-            verbose: Whether to print detailed information
-        """
         super().__init__(task_id, output_dir, random_state)
         self.model = MLPClassifier(max_iter=1000, random_state=random_state)
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "neural_network"
-        
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, SearchSpace.nn_space, verbose=self.verbose)
         self.model.fit(X, y)
-        
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-        
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
 
 class KNNClassifier(TunedClassifierMixin, BaseClassifier):
@@ -156,133 +156,169 @@ class KNNClassifier(TunedClassifierMixin, BaseClassifier):
     """
     
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        """
-        Initialize KNN classifier.
-        
-        Args:
-            task_id: Identifier for the specific task
-            output_dir: Directory for saving outputs
-            random_state: Random seed for reproducibility
-            verbose: Whether to print detailed information
-        """
         super().__init__(task_id, output_dir, random_state)
         self.model = KNeighborsClassifier()
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "knn"
-        
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, SearchSpace.knn_space, verbose=self.verbose)
         self.model.fit(X, y)
-        
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-        
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
 
 class XGBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """XGBoost classifier implementation with hyperparameter tuning."""
-    
+
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, output_dir, random_state)
         self.model = XGBClassifier(
             random_state=random_state,
-            eval_metric='logloss' 
+            eval_metric='logloss'
         )
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "xgboost"
-    
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, ExtendedSearchSpace.xgb_space, verbose=self.verbose)
         self.model.fit(X, y)
-    
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-    
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
     
     
 class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """CatBoost classifier implementation with hyperparameter tuning."""
-    
+
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, output_dir, random_state)
-        self.model = catboost.CatBoostClassifier(  # Use fully qualified name
+        self.model = catboost.CatBoostClassifier(
             random_state=random_state,
             verbose=False  # Disable logging output
         )
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "catboost"
-    
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, ExtendedSearchSpace.catboost_space, verbose=self.verbose)
         self.model.fit(X, y)
-    
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-    
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
     
 
 class DecisionTreeClassifier(TunedClassifierMixin, BaseClassifier):
     """Decision Tree classifier implementation with hyperparameter tuning."""
-    
+
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, output_dir, random_state)
         self.model = sklearn.tree.DecisionTreeClassifier(random_state=random_state)
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names
+
     def get_classifier_name(self) -> str:
         return "decision_tree"
-    
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, ExtendedSearchSpace.dt_space, verbose=self.verbose)
         self.model.fit(X, y)
-    
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-    
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses stored feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
+    
 
 class AdaBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """AdaBoost classifier implementation with hyperparameter tuning."""
     
     def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, output_dir, random_state)
-        # Use the fully qualified scikit-learn AdaBoost classifier
         self.model = sklearn.ensemble.AdaBoostClassifier(random_state=random_state)
         self.verbose = verbose
-    
+        self.feature_names = None  # Store feature names for inference
+
     def get_classifier_name(self) -> str:
         return "adaboost"
     
-    def _fit_implementation(self, X: np.ndarray, y: pd.Series) -> None:
+    def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Ensure that feature names are stored during training."""
+        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+        self.feature_names = X.columns  # Store feature names
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.tune_hyperparameters(X, y, ExtendedSearchSpace.adaboost_space, verbose=self.verbose)
         self.model.fit(X, y)
-    
-    def _predict_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure inference uses the correct feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict(X)
-    
-    def _predict_proba_implementation(self, X: np.ndarray) -> np.ndarray:
+
+    def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+        """Ensure probability prediction uses correct feature names."""
+        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
         return self.model.predict_proba(X)
     
     
