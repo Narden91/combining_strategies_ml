@@ -50,23 +50,38 @@ def create_task_rankings(
     diversity_weight: float = 0.5
 ) -> pd.DataFrame:
     """Create task rankings based on diversity and confidence scores."""
+    # Calculate diversity scores
     diversity_scores = calculate_diversity_score(matrix)
     tasks = matrix.columns.tolist()
-    
+
     # Handle confidence scores
     if confidence_df is not None:
-        # Get mean confidence per task
-        conf_cols = [col for col in confidence_df.columns if col.startswith('Cd1_')]
-        conf_scores = confidence_df[conf_cols].mean().to_numpy()
+        # Extract confidence columns matching matrix tasks
+        conf_scores = []
+        for task in tasks:
+            conf_col = f"Cd1_{task}"  # Match the confidence column format
+            if conf_col in confidence_df.columns:
+                conf_scores.append(confidence_df[conf_col].mean())  # Get mean confidence per task
+            else:
+                conf_scores.append(0)  # If task is missing, assign zero confidence
+        conf_scores = np.array(conf_scores)
     else:
         conf_scores = np.zeros(len(diversity_scores))
-    
+
+    # Normalize scores to avoid scale imbalance
+    diversity_scores = np.array(diversity_scores)
+    if np.ptp(diversity_scores) > 0:  # Avoid division by zero
+        diversity_scores = (diversity_scores - np.min(diversity_scores)) / np.ptp(diversity_scores)
+
+    if np.ptp(conf_scores) > 0:
+        conf_scores = (conf_scores - np.min(conf_scores)) / np.ptp(conf_scores)
+
     # Calculate combined scores
     combined_scores = (
         diversity_weight * diversity_scores + 
         (1 - diversity_weight) * conf_scores
     )
-    
+
     # Create and sort rankings
     rankings_df = pd.DataFrame({
         'Task': tasks,
@@ -74,8 +89,8 @@ def create_task_rankings(
         'Confidence_Score': conf_scores,
         'Overall_Score': combined_scores
     })
-    
-    return rankings_df.sort_values('Overall_Score', ascending=False)
+
+    return rankings_df.sort_values('Overall_Score', ascending=False, ignore_index=True)
 
 def get_ensemble_prediction(predictions_df: pd.DataFrame, task_columns: List[str]) -> pd.Series:
     """Get ensemble prediction using selected tasks."""
@@ -107,13 +122,18 @@ def ranking(predictions_df: pd.DataFrame, confidence_df: pd.DataFrame, verbose: 
     
     if verbose:
         print(f"\nAnalyzing {len(task_cols)} tasks...")
+        print(f"Tasks: {task_cols}")
     
     # Create common elements matrix
     common_matrix = create_common_task_matrix(predictions_df, task_cols)
     
     if verbose:
-        print("\n[bold]Common Elements Matrix:[/bold]")
-        print(common_matrix)
+        print(f"Common matrix:\n {common_matrix}")
+        print(f"Confidence df:\n {confidence_df}")
+    
+    if confidence_df.empty:
+        raise ValueError("Error: Confidence DataFrame is empty. Check input data.")
+
     
     # Create rankings
     rankings = create_task_rankings(common_matrix, confidence_df)

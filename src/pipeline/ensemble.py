@@ -97,7 +97,7 @@ class EnsemblePipeline:
 
         aggregated_predictions = {}  # Store predictions per task
         aggregated_confidences = {}  # Store confidence scores per task
-        original_classes = None  # Store ground truth labels
+        all_ids = set()  # Store unique IDs across all tasks
 
         with Progress() as progress:
             task = progress.add_task("[cyan]Processing tasks...", total=len(csv_files))
@@ -108,76 +108,63 @@ class EnsemblePipeline:
                 progress.update(task, description=f"[cyan]Processing {task_id}...")
 
                 # Load dataset
-                # X, y, id_column = manager.load_task_data(csv_file.stem)
                 X, y = manager.load_task_data(csv_file.stem)
                 
                 if X.empty or y.empty:
                     self.printer.print_warning(f"Task {task_id} has no valid data. Skipping.")
                     raise ValueError(f"Task {task_id} has no valid data.")
 
-                # # Store original class labels (assumed consistent across tasks)
-                # if original_classes is None:
-                #     original_classes = y.rename("Class")  # Rename for clarity
-
                 classifier = get_classifier(
                     self.config.classification.classifier,
                     task_id,
                     classification_output,
-                    seed)
+                    seed
+                )
 
                 # Train classifier
-                classifier, y_pred, y_proba, id_col_test, y_test = manager.train_classifier(classifier, X, y,
-                                                                                       test_size=self.config.classification.test_size,
-                                                                                       seed=seed)
-                
-                # Store original class labels (assumed consistent across tasks)
-                if original_classes is None:
-                    original_classes = pd.DataFrame({"Id": id_col_test, "Class": y_test})  # Ensure DataFrame format
+                classifier, y_pred, y_proba, id_col_test, y_test = manager.train_classifier(
+                    classifier, X, y, test_size=self.config.classification.test_size, seed=seed
+                )
 
-                
+                # Update the set of all IDs across tasks
+                all_ids.update(id_col_test)
+
+                # Store original class labels (only set once)
+                if "original_classes" not in locals():
+                    original_classes = pd.DataFrame({"Id": id_col_test, "Class": y_test})
+
+                # Store task-specific predictions and confidences
                 predictions_df = pd.DataFrame({"Id": id_col_test, f"{task_id}": y_pred})
                 confidences_df = pd.DataFrame({
                     "Id": id_col_test,
-                    f"Cd_0_{task_id}": y_proba[:, 0],
-                    f"Cd_1_{task_id}": y_proba[:, 1]
+                    f"Cd0_{task_id}": y_proba[:, 0],
+                    f"Cd1_{task_id}": y_proba[:, 1]
                 })
-                
+
                 aggregated_predictions[task_id] = predictions_df
                 aggregated_confidences[task_id] = confidences_df
 
                 progress.update(task, advance=1)
             
-                if task_id == "T02":
+                if task_id == "T03":
                     break
+        
+        # Convert unique IDs to DataFrame to serve as the base structure
+        all_ids_df = pd.DataFrame({"Id": list(all_ids)})
 
-        # Merge all task results into a single DataFrame
-        final_predictions_df = pd.DataFrame()
-        final_confidences_df = pd.DataFrame()
-
+        # Ensure missing task predictions are NaN
+        final_predictions_df = all_ids_df.copy()
         for task_id, df in aggregated_predictions.items():
-            df.sort_values(by="Id", inplace=True)  # Ensure consistent ordering
-            if final_predictions_df.empty:
-                final_predictions_df = df
-            else:
-                final_predictions_df = final_predictions_df.merge(df, on="Id", how="outer")
+            final_predictions_df = final_predictions_df.merge(df, on="Id", how="outer")  # Ensure missing values are NaN
 
+        # Ensure missing confidence values are NaN
+        final_confidences_df = all_ids_df.copy()
         for task_id, df in aggregated_confidences.items():
-            df.sort_values(by="Id", inplace=True)  # Ensure consistent ordering
-            if final_confidences_df.empty:
-                final_confidences_df = df
-            else:
-                final_confidences_df = final_confidences_df.merge(df, on="Id", how="outer")
-                final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
+            final_confidences_df = final_confidences_df.merge(df, on="Id", how="outer")  # Ensure missing values are NaN
 
-        # Add original class column
-        if "Id" in original_classes.columns:
-            final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
-        else:
-            print("Warning: 'Id' column missing from original_classes")
-
-        # Save final DataFrames
-        # output_path_predictions = classification_output / f"{classifier.get_classifier_name()}_predictions.csv"
-        # output_path_confidences = classification_output / f"{classifier.get_classifier_name()}_confidences.csv"
+        # Merge with original class labels (NaN where missing)
+        final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
+        final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
         
         output_clf = classification_output / f"{classifier.get_classifier_name()}" 
         os.makedirs(output_clf, exist_ok=True)
@@ -440,10 +427,11 @@ class EnsemblePipeline:
         result_df: pd.DataFrame,
         metrics: Dict,
         clf_output: Path,
-        run: int
+        run: int,
+        combining_method: str
     ) -> None:
         """Save ensemble results and metrics."""
-        output_path = Path(clf_output) / "ensemble_output"
+        output_path = Path(clf_output) / f"Output_{combining_method}"
         output_path.mkdir(exist_ok=True)
         
         predictions_file = self._generate_output_filename_classification("predictions", run=run)

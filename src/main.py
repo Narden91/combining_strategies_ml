@@ -35,6 +35,11 @@ def main(cfg: DictConfig) -> None:
                 
             else:
                 predictions_df, confidence_df = pipeline.load_data()
+                
+            if cfg.settings.verbose:
+                printer.print_info("Ensemble method is being executed...")
+                printer.print_info(f"Predictions df:\n {predictions_df}")
+                printer.print_info(f"Confidence df:\n {confidence_df}")
         
             # Execute ensemble method and evaluate results
             result_df = pipeline.execute_ensemble_method(predictions_df, confidence_df)
@@ -42,7 +47,7 @@ def main(cfg: DictConfig) -> None:
                         
             # Save results
             if cfg.classification.enabled:
-                pipeline.save_results_clf_ensemble(result_df, metrics, output_clf, run)
+                pipeline.save_results_clf_ensemble(result_df, metrics, output_clf, run, cfg.settings.combining_technique)
             else:
                 pipeline.save_results(result_df, metrics, output_clf)
             

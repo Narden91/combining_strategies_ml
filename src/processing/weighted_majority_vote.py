@@ -93,7 +93,7 @@ def weighted_majority_voting(predictions_df, confidence_df, validation_accuracie
             print(f"  Class 0 weighted votes: {sum_class0[i]:.3f}")
             print(f"  Final prediction: {majority_votes[i]}")
     
-    print("\n[bold]Predictions Data:[/bold]")
-    print(result_df)
+        print("\n[bold]Predictions Data:[/bold]")
+        print(result_df)
     
     return result_df
