@@ -65,12 +65,13 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_directory_creation(path_name, path_value)
     
-    def run_classification(self, run:int, seed:int) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def run_classification(self, run:int, seed:int, save_results: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run the classification phase.
 
         Args:
             run (int): run number
             seed (int): random seed
+            save_results (bool): whether to save results
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame]: dataframes with predictions and confidences
         """
@@ -166,23 +167,25 @@ class EnsemblePipeline:
         final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
         final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
         
-        output_clf = classification_output / f"{classifier.get_classifier_name()}" 
-        os.makedirs(output_clf, exist_ok=True)
-        
-        output_run = output_clf / f"run_{run + 1}"
-        os.makedirs(output_run, exist_ok=True)
-        
-        output_path_predictions = output_run / f"Predictions.csv"
-        output_path_confidences = output_run / f"Confidences.csv"
+        output_clf = classification_output / f"{classifier.get_classifier_name()}"
+        if save_results:
+            output_clf = classification_output / f"{classifier.get_classifier_name()}" 
+            os.makedirs(output_clf, exist_ok=True)
+            
+            output_run = output_clf / f"run_{run + 1}"
+            os.makedirs(output_run, exist_ok=True)
+            
+            output_path_predictions = output_run / f"Predictions.csv"
+            output_path_confidences = output_run / f"Confidences.csv"
 
-        final_predictions_df.to_csv(output_path_predictions, index=False)
-        final_confidences_df.to_csv(output_path_confidences, index=False)
+            final_predictions_df.to_csv(output_path_predictions, index=False)
+            final_confidences_df.to_csv(output_path_confidences, index=False)
 
-        if self.verbose:
-            self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
-            self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
+            if self.verbose:
+                self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
+                self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
 
-        return final_predictions_df, final_confidences_df, output_clf
+        return final_predictions_df, final_confidences_df, output_clf, classifier.get_classifier_name()
     
     def _process_classification_tasks(
         self,

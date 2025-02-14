@@ -23,7 +23,8 @@ data:
 
 settings:
   verbose: false
-  combining_technique: WMV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
+  combining_technique: MV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
+  save_individual_results: false
 
 classification:
   enabled: true          # Whether to run classification before ensemble

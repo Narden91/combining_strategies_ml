@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import hydra
 from omegaconf import DictConfig
+import pandas as pd
 
 # Prevent Python from creating bytecode files
 sys.dont_write_bytecode = True
@@ -23,7 +24,10 @@ def main(cfg: DictConfig) -> None:
             printer.print_config_table(cfg)
         
         pipeline.setup_directories()
-        
+
+        # DataFrame to store all run metrics
+        all_metrics_df = pd.DataFrame()
+
         for run in range(cfg.classification.n_runs):
             printer.print_header(f"Performing run: {run + 1}")
             
@@ -31,8 +35,7 @@ def main(cfg: DictConfig) -> None:
                 
             # Handle classification or load existing data
             if cfg.classification.enabled:
-                predictions_df, confidence_df, output_clf = pipeline.run_classification(run, run_seed)
-                
+                predictions_df, confidence_df, output_clf, classifier_name = pipeline.run_classification(run, run_seed, cfg.settings.save_individual_results)
             else:
                 predictions_df, confidence_df = pipeline.load_data()
                 
@@ -44,13 +47,30 @@ def main(cfg: DictConfig) -> None:
             # Execute ensemble method and evaluate results
             result_df = pipeline.execute_ensemble_method(predictions_df, confidence_df)
             confusion_matrix, metrics = evaluate_predictions(result_df, cfg.settings.verbose)
-                        
-            # Save results
-            if cfg.classification.enabled:
-                pipeline.save_results_clf_ensemble(result_df, metrics, output_clf, run, cfg.settings.combining_technique)
-            else:
-                pipeline.save_results(result_df, metrics, output_clf)
             
+            # Convert metrics to DataFrame
+            run_metrics_df = pd.DataFrame([metrics])
+            run_metrics_df.insert(0, "Run", run + 1)  # Add run identifier
+            
+            # Append to accumulated results
+            all_metrics_df = pd.concat([all_metrics_df, run_metrics_df], ignore_index=True)
+
+            # # Save individual results if needed
+            # if cfg.classification.enabled and cfg.settings.save_individual_results:
+            #     pipeline.save_results_clf_ensemble(result_df, metrics, output_clf, run, cfg.settings.combining_technique)
+            # elif cfg.settings.save_individual_results:
+            #     pipeline.save_results(result_df, metrics, output_clf)
+
+        # Save aggregated metrics CSV
+        if cfg.classification.enabled:
+            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{classifier_name}_{cfg.settings.combining_technique}.csv"
+        else:
+            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{cfg.settings.combining_technique}.csv"
+        all_metrics_df.to_csv(metrics_output_path, index=False)
+
+        if cfg.settings.verbose:
+            printer.print_info(f"Aggregated metrics saved to {metrics_output_path}")
+
         printer.print_footer(success=True)
         return 0
         
