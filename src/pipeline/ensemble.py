@@ -147,7 +147,7 @@ class EnsemblePipeline:
 
                 progress.update(task, advance=1)
             
-                if task_id == "T03":
+                if task_id == "T3":
                     break
         
         # Convert unique IDs to DataFrame to serve as the base structure
@@ -184,6 +184,10 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
                 self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
+                
+        # remove rows where Class is NaN from final_predictions_df and final_confidences_df
+        final_predictions_df = final_predictions_df.dropna(subset=["Class"])
+        final_confidences_df = final_confidences_df.dropna(subset=["Class"])
 
         return final_predictions_df, final_confidences_df, output_clf, classifier.get_classifier_name()
     

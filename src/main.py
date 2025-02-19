@@ -41,6 +41,7 @@ def main(cfg: DictConfig) -> None:
                 
             if cfg.settings.verbose:
                 printer.print_info("Ensemble method is being executed...")
+            
                 printer.print_info(f"Predictions df:\n {predictions_df}")
                 printer.print_info(f"Confidence df:\n {confidence_df}")
         
@@ -66,6 +67,17 @@ def main(cfg: DictConfig) -> None:
             metrics_output_path = Path(cfg.paths.output) / f"Metrics_{classifier_name}_{cfg.settings.combining_technique}.csv"
         else:
             metrics_output_path = Path(cfg.paths.output) / f"Metrics_{cfg.settings.combining_technique}.csv"
+        
+        # Add 2 rows at the end of the DataFrame to store the mean and standard deviation of the metrics
+        mean_metrics = all_metrics_df.mean()
+        std_metrics = all_metrics_df.std()
+        mean_metrics["Run"] = "Mean"
+        std_metrics["Run"] = "Std"
+        mean_metrics_df = pd.DataFrame([mean_metrics])
+        std_metrics_df = pd.DataFrame([std_metrics])
+
+        all_metrics_df = pd.concat([all_metrics_df, mean_metrics_df, std_metrics_df], ignore_index=True)
+
         all_metrics_df.to_csv(metrics_output_path, index=False)
 
         if cfg.settings.verbose:

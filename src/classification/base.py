@@ -175,9 +175,7 @@ class ClassificationManager:
         self.output_base = output_base
         self.n_runs = n_runs
         self.base_seed = base_seed
-        
-        os.makedirs(self.output_base, exist_ok=True)
-        
+                
     def load_task_data(self, task_id: str) -> Tuple[pd.DataFrame, pd.Series, Optional[pd.Series]]:
         """
         Load data for a specific task, returning features, labels, and the ID column (if present).

@@ -227,10 +227,15 @@ class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
         super().__init__(task_id, output_dir, random_state)
         self.model = catboost.CatBoostClassifier(
             random_state=random_state,
-            verbose=False  # Disable logging output
+            thread_count=-1,  # Use all CPU cores
+            early_stopping_rounds=20,
+            od_type='Iter',
+            bootstrap_type='Bernoulli',
+            verbose=False,
+            task_type='CPU'  # Explicit CPU usage
         )
         self.verbose = verbose
-        self.feature_names = None  # Store feature names
+        self.feature_names = None
 
     def get_classifier_name(self) -> str:
         return "catboost"

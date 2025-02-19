@@ -58,12 +58,23 @@ class ExtendedSearchSpace(SearchSpace):
         'min_child_weight': list(range(1, 7))
     }
     
+    # catboost_space = {
+    #     'iterations': SearchSpace._create_randint(100, 500),
+    #     'depth': list(range(4, 11)),
+    #     'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
+    #     'l2_leaf_reg': SearchSpace._create_uniform(1.0, 10.0),
+    #     'subsample': SearchSpace._create_uniform(0.6, 1.0)
+    # }
+    
     catboost_space = {
-        'iterations': SearchSpace._create_randint(100, 500),
-        'depth': list(range(4, 11)),
-        'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
-        'l2_leaf_reg': SearchSpace._create_uniform(1.0, 10.0),
-        'subsample': SearchSpace._create_uniform(0.6, 1.0)
+        'iterations': (100, 500),  # Reduced upper bound
+        'depth': (4, 6),           # Shallower trees
+        'learning_rate': (0.03, 0.2, 'log-uniform'),
+        'l2_leaf_reg': (1, 5),
+        'bootstrap_type': ['Bernoulli'],  # Faster than Bayesian
+        'subsample': (0.7, 0.9),
+        'grow_policy': ['SymmetricTree'],  # Faster growth strategy
+        'early_stopping_rounds': 20       # Add early stopping
     }
     
     dt_space = {
