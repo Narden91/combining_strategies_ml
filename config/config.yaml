@@ -23,12 +23,12 @@ data:
 
 settings:
   verbose: false
-  combining_technique: MV  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS
+  combining_technique: [MV, WMV, RK, ERK, HC]  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS [MV, WMV, RK, ERK, HC]
   save_individual_results: false
 
 classification:
   enabled: true          # Whether to run classification before ensemble
-  classifier: nn         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
+  classifier: rf         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.2         # Proportion of data to use for testing
   n_runs: 30              # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility

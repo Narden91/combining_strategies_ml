@@ -7,6 +7,7 @@ import pandas as pd
 # Prevent Python from creating bytecode files
 sys.dont_write_bytecode = True
 
+from utils.helpers import append_mean_std_for_method
 from evaluation.metrics import evaluate_predictions
 from utils.printer import ConsolePrinter
 from pipeline.ensemble import EnsemblePipeline
@@ -39,46 +40,35 @@ def main(cfg: DictConfig) -> None:
             else:
                 predictions_df, confidence_df = pipeline.load_data()
                 
-            if cfg.settings.verbose:
-                printer.print_info("Ensemble method is being executed...")
-            
-                printer.print_info(f"Predictions df:\n {predictions_df}")
-                printer.print_info(f"Confidence df:\n {confidence_df}")
+            for method in pipeline.ensemble_methods:
+                if cfg.settings.verbose:
+                    printer.print_info(f"Ensemble method {method.value} is being executed...")
+
+                # Get the ensemble result for this method
+                result_df = pipeline.execute_ensemble_method(method, predictions_df, confidence_df)
+                
+                # Evaluate predictions
+                confusion_matrix, metrics = evaluate_predictions(result_df, cfg.settings.verbose)
+                
+                # Convert metrics to DataFrame
+                run_metrics_df = pd.DataFrame([metrics])
+                run_metrics_df.insert(0, "Run", run + 1)
+                run_metrics_df.insert(1, "Method", method.value)
+                
+                # Append to accumulated results
+                all_metrics_df = pd.concat([all_metrics_df, run_metrics_df], ignore_index=True)
         
-            # Execute ensemble method and evaluate results
-            result_df = pipeline.execute_ensemble_method(predictions_df, confidence_df)
-            confusion_matrix, metrics = evaluate_predictions(result_df, cfg.settings.verbose)
-            
-            # Convert metrics to DataFrame
-            run_metrics_df = pd.DataFrame([metrics])
-            run_metrics_df.insert(0, "Run", run + 1)  # Add run identifier
-            
-            # Append to accumulated results
-            all_metrics_df = pd.concat([all_metrics_df, run_metrics_df], ignore_index=True)
-
-            # # Save individual results if needed
-            # if cfg.classification.enabled and cfg.settings.save_individual_results:
-            #     pipeline.save_results_clf_ensemble(result_df, metrics, output_clf, run, cfg.settings.combining_technique)
-            # elif cfg.settings.save_individual_results:
-            #     pipeline.save_results(result_df, metrics, output_clf)
-
         # Save aggregated metrics CSV
         if cfg.classification.enabled:
-            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{classifier_name}_{cfg.settings.combining_technique}.csv"
+            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{classifier_name}_ALL_METHODS.csv"
         else:
-            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{cfg.settings.combining_technique}.csv"
+            metrics_output_path = Path(cfg.paths.output) / "Metrics_ALL_METHODS.csv"
+
+        grouped = all_metrics_df.groupby("Method")
         
-        # Add 2 rows at the end of the DataFrame to store the mean and standard deviation of the metrics
-        mean_metrics = all_metrics_df.mean()
-        std_metrics = all_metrics_df.std()
-        mean_metrics["Run"] = "Mean"
-        std_metrics["Run"] = "Std"
-        mean_metrics_df = pd.DataFrame([mean_metrics])
-        std_metrics_df = pd.DataFrame([std_metrics])
+        final_metrics_df = grouped.apply(append_mean_std_for_method).reset_index(drop=True)
 
-        all_metrics_df = pd.concat([all_metrics_df, mean_metrics_df, std_metrics_df], ignore_index=True)
-
-        all_metrics_df.to_csv(metrics_output_path, index=False)
+        final_metrics_df.to_csv(metrics_output_path, index=False)
 
         if cfg.settings.verbose:
             printer.print_info(f"Aggregated metrics saved to {metrics_output_path}")

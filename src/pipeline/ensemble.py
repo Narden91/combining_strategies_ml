@@ -4,7 +4,8 @@ from typing import Callable, Dict, Tuple, List, Optional
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
+
 from rich.progress import Progress
 
 from utils.printer import ConsolePrinter
@@ -54,9 +55,25 @@ class EnsemblePipeline:
         self.config = config
         self.printer = ConsolePrinter()
         self.verbose = config.settings.verbose
-        self.ensemble_method = EnsembleMethod.from_string(
-            config.settings.combining_technique
-        )
+        
+        if isinstance(config.settings.combining_technique, str):
+            # Single method
+            self.ensemble_methods = [
+                EnsembleMethod.from_string(config.settings.combining_technique)
+            ]
+        elif isinstance(config.settings.combining_technique, (list, ListConfig)):
+            # Multiple methods
+            self.ensemble_methods = [
+                EnsembleMethod.from_string(method_str)
+                for method_str in config.settings.combining_technique
+            ]
+        else:
+            raise ValueError("Invalid 'combining_technique'. Must be str or list[str].")
+
+        
+        # self.ensemble_method = EnsembleMethod.from_string(
+        #     config.settings.combining_technique
+        # )
         
     def setup_directories(self) -> None:
         """Create necessary output directories."""
@@ -146,8 +163,8 @@ class EnsemblePipeline:
                 aggregated_confidences[task_id] = confidences_df
 
                 progress.update(task, advance=1)
-            
-                if task_id == "T3":
+                
+                if task_id == "T03":  # For testing purposes
                     break
         
         # Convert unique IDs to DataFrame to serve as the base structure
@@ -354,35 +371,22 @@ class EnsemblePipeline:
     
     def execute_ensemble_method(
         self,
+        method,
         predictions_df: pd.DataFrame,
         confidence_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Execute the selected ensemble method."""
         method_mapping = {
-            EnsembleMethod.MV: lambda: majority_vote.majority_voting(
-                predictions_df, verbose=self.verbose
-            ),
-            EnsembleMethod.WMV: lambda: self._execute_weighted_majority_voting(
-                predictions_df, confidence_df
-            ),
-            EnsembleMethod.RK: lambda: ranking.ranking(
-                predictions_df, confidence_df, verbose=self.verbose
-            ),
-            EnsembleMethod.ERK: lambda: entropy_ranking.entropy_ranking(
-                predictions_df, confidence_df, verbose=self.verbose
-            ),
-            EnsembleMethod.HC: lambda: hill_climbing.hill_climbing_combine(
-                predictions_df, confidence_df, verbose=self.verbose
-            ),
-            EnsembleMethod.SA: lambda: simulated_annealing.simulated_annealing_combine(
-                predictions_df, confidence_df, verbose=self.verbose
-            ),
-            EnsembleMethod.TS: lambda: tabu_search.tabu_search_combine(
-                predictions_df, confidence_df, verbose=self.verbose
-            )
+        EnsembleMethod.MV: lambda: majority_vote.majority_voting(predictions_df, verbose=self.verbose),
+        EnsembleMethod.WMV: lambda: self._execute_weighted_majority_voting(predictions_df, confidence_df),
+        EnsembleMethod.RK: lambda: ranking.ranking(predictions_df, confidence_df, verbose=self.verbose),
+        EnsembleMethod.ERK: lambda: entropy_ranking.entropy_ranking(predictions_df, confidence_df, verbose=self.verbose),
+        EnsembleMethod.HC: lambda: hill_climbing.hill_climbing_combine(predictions_df, confidence_df, verbose=self.verbose),
+        EnsembleMethod.SA: lambda: simulated_annealing.simulated_annealing_combine(predictions_df, confidence_df, verbose=self.verbose),
+        EnsembleMethod.TS: lambda: tabu_search.tabu_search_combine(predictions_df, confidence_df, verbose=self.verbose)
         }
-        
-        return method_mapping[self.ensemble_method]()
+    
+        return method_mapping[method]()
     
     def _execute_weighted_majority_voting(
         self,
