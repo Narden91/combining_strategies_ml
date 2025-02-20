@@ -1,50 +1,38 @@
 from rich import print
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
-def majority_voting(predictions_df, verbose=False):
+def majority_voting(predictions_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     """
-    Highly optimized majority voting implementation using NumPy vectorized operations,
-    ignoring NaN values. For each row, the vote is computed as the fraction of 1s among 
-    non-NaN predictions. If no predictions are available (all values are NaN), the default
-    is to choose 1.
+    Perform majority voting for ensemble classification.
     
-    Parameters:
-    predictions_df (pandas.DataFrame): DataFrame containing the prediction columns.
-      (Assumes that the columns to vote on start with 'TASK_'.)
-    verbose (bool): If True, prints additional debugging information.
+    Args:
+        predictions_df (pd.DataFrame): DataFrame with 'Id' column and task predictions in columns starting with 'T'
+        verbose (bool): Whether to print debugging info
     
     Returns:
-    pandas.DataFrame: A copy of the original DataFrame with an additional column 
-                      'predicted_class' containing the result of majority voting.
+        pd.DataFrame: DataFrame with 'Id' and predicted 'Class'
     """
-    print("[bold green]Executing Majority Voting[/bold green]")
-        
-    # Select only the columns corresponding to tasks.
-    task_columns = [col for col in predictions_df.columns if col.startswith("T")]
-    # Convert the selected columns to a NumPy array.
-    X = predictions_df[task_columns].to_numpy()
-    
-    # Compute the sum of ones ignoring NaN values.
-    ones = np.nansum(X, axis=1)
-    # Count how many non-NaN predictions are present in each row.
-    valid_counts = np.sum(~np.isnan(X), axis=1)
-    
-    # Compute the voting fraction for each row.
-    # For rows with no valid predictions, we set the fraction to 1 (tie-breaker).
-    vote_fraction = np.where(valid_counts > 0, ones / valid_counts, 1.0)
-    
-    # Majority vote: if the fraction is >= 0.5, choose 1; otherwise, 0.
-    majority_votes = (vote_fraction >= 0.5).astype(np.int8)
-    
-    # Create a copy of the DataFrame to add the predicted class.
-    result_df = predictions_df.copy()
-    result_df['predicted_class'] = majority_votes
+    print("[bold green]Executing Weighted Majority Voting[/bold green]")
+    # Identify the task prediction columns (T columns)
+    task_columns = [col for col in predictions_df.columns if col.startswith('T')]
+
+    # Drop rows where all T* columns are NaN (make a copy to avoid warnings)
+    predictions_df = predictions_df.dropna(subset=task_columns, how='all').copy()
+
+    # Determine the majority class per row (ignoring NaN values)
+    predictions_df.loc[:, 'Predicted_Class'] = predictions_df[task_columns].mode(axis=1)[0]
+
+    # Ensure the predicted class column is of integer type (if applicable)
+    predictions_df.loc[:, 'Predicted_Class'] = predictions_df['Predicted_Class'].astype('Int64')  # Allows NaN handling
     
     if verbose:
         print("\n[bold]Predictions Data:[/bold]")
-        print(result_df)
-    
-    return result_df
+        print(predictions_df)
+
+    # Return only necessary columns
+    return predictions_df.copy()
+
+
 

@@ -1,6 +1,6 @@
 from enum import Enum
 import os
-from typing import Callable, Dict, Tuple, List, Optional
+from typing import Callable, Dict, Set, Tuple, List, Optional
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -82,30 +82,68 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_directory_creation(path_name, path_value)
     
-    def run_classification(self, run:int, seed:int, save_results: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Run the classification phase.
+    def run_classification(self, run: int, seed: int, save_results: bool) -> Tuple[pd.DataFrame, pd.DataFrame, Path, str]:
+        """
+        Run the classification phase for all tasks, ensuring that only IDs common
+        to every task appear in the final test sets.
+
+        This prevents rows with NaN values in the aggregated predictions and 
+        confidence DataFrames. For each CSV in the feature vector folder:
+        1. We load all CSVs first to compute the intersection of IDs.
+        2. For each task, we filter the dataset to retain only the common IDs.
+        3. We perform a train/test split and train the chosen classifier.
+        4. We aggregate the predictions and confidence scores in one DataFrame 
+            each (final_predictions_df, final_confidences_df).
 
         Args:
-            run (int): run number
-            seed (int): random seed
-            save_results (bool): whether to save results
+            run (int): The run number (0-based).
+            seed (int): The base random seed for reproducibility.
+            save_results (bool): Whether to save intermediate results (CSV files).
+
         Returns:
-            Tuple[pd.DataFrame, pd.DataFrame]: dataframes with predictions and confidences
+        Tuple[pd.DataFrame, pd.DataFrame, Path, str, pd.DataFrame]:
+            - final_predictions_df: DataFrame containing the final predictions
+              from every task, merged on ID.
+            - final_confidences_df: DataFrame containing the final confidence
+              scores from every task, merged on ID.
+            - output_clf: The path to the final classifier output directory.
+            - classifier_name: Name of the classifier used.
+            - accuracy_df: A one-row DataFrame containing accuracy values for each
+              task, with columns labeled by task ID 
         """
         if self.verbose:
             self.printer.print_info("Starting classification phase...")
 
+        # Paths setup
         feature_vector_path = Path(self.config.paths.data) / self.config.data.feature_vector.folder
         classification_output = Path(self.config.paths.output) / "classification_output"
 
-        # self.printer.print_info("Loading classification data...")
-        # self.printer.print_info(f"Feature vector path: {feature_vector_path}")
-
-        # Load all CSV files from the feature vector folder
+        # Collect all CSVs
         csv_files = list(feature_vector_path.glob("*.csv"))
         if not csv_files:
             raise FileNotFoundError(f"No feature vector files found in {feature_vector_path}")
+        
+        task_accuracies = {}  # Store accuracy values for each task
 
+        # ----------------------------------------------------------------------
+        # STEP 1: Determine the intersection of IDs across all tasks.
+        # ----------------------------------------------------------------------
+        common_ids: Set[str] = set()
+        first_file = True
+        for csv_file in csv_files:
+            df_temp = pd.read_csv(csv_file)
+            # If first file, initialize the 'common_ids' set
+            if first_file:
+                common_ids = set(df_temp["Id"])
+                first_file = False
+            else:
+                # Intersect with new file's IDs
+                common_ids &= set(df_temp["Id"])
+
+        if not common_ids:
+            raise ValueError("No common IDs found across all tasks. Cannot proceed.")
+
+        # Classification manager
         manager = ClassificationManager(
             feature_vector_path,
             classification_output,
@@ -115,23 +153,36 @@ class EnsemblePipeline:
 
         aggregated_predictions = {}  # Store predictions per task
         aggregated_confidences = {}  # Store confidence scores per task
-        all_ids = set()  # Store unique IDs across all tasks
+        all_ids = set()              # Collect IDs actually used in each test split
+        original_classes = None      # We'll store the reference y_test for merging
 
+        # Rich progress bar
+        from rich.progress import Progress
         with Progress() as progress:
             task = progress.add_task("[cyan]Processing tasks...", total=len(csv_files))
 
             for csv_file in csv_files:
-                task_id = csv_file.stem.replace("_test_features", "")  # Normalize task ID
-                
+                task_id = csv_file.stem.replace("_test_features", "")  # Normalize ID
                 progress.update(task, description=f"[cyan]Processing {task_id}...")
 
-                # Load dataset
-                X, y = manager.load_task_data(csv_file.stem)
-                
-                if X.empty or y.empty:
-                    self.printer.print_warning(f"Task {task_id} has no valid data. Skipping.")
-                    raise ValueError(f"Task {task_id} has no valid data.")
+                # ------------------------------------------------------------------
+                # STEP 2: Load dataset, but keep only the rows with IDs in common.
+                # ------------------------------------------------------------------
+                full_df = pd.read_csv(csv_file)
+                # Filter to include only the intersection of IDs
+                full_df = full_df[full_df["Id"].isin(common_ids)]
 
+                # If after filtering we have empty data, raise an error
+                if full_df.empty:
+                    self.printer.print_warning(f"Task {task_id} has no common IDs. Skipping.")
+                    raise ValueError(f"Task {task_id} has no valid data after ID intersection.")
+
+                X = full_df.drop('Class', axis=1)
+                y = full_df['Class']
+
+                # ------------------------------------------------------------------
+                # STEP 3: Instantiate and train the classifier for this task
+                # ------------------------------------------------------------------
                 classifier = get_classifier(
                     self.config.classification.classifier,
                     task_id,
@@ -139,20 +190,33 @@ class EnsemblePipeline:
                     seed
                 )
 
-                # Train classifier
+                # Train classifier: returns the fitted classifier, predictions, etc.
                 classifier, y_pred, y_proba, id_col_test, y_test = manager.train_classifier(
-                    classifier, X, y, test_size=self.config.classification.test_size, seed=seed
+                    classifier,
+                    X,
+                    y,
+                    test_size=self.config.classification.test_size,
+                    seed=seed
                 )
+                
+                accuracy = np.mean(y_pred == y_test)
+                task_accuracies[task_id] = accuracy
 
-                # Update the set of all IDs across tasks
+                # Merge all IDs from the test set(s)
                 all_ids.update(id_col_test)
 
-                # Store original class labels (only set once)
-                if "original_classes" not in locals():
+                # We'll store the test labels the first time we see them,
+                # to keep a reference for merging later.
+                if original_classes is None:
                     original_classes = pd.DataFrame({"Id": id_col_test, "Class": y_test})
 
-                # Store task-specific predictions and confidences
-                predictions_df = pd.DataFrame({"Id": id_col_test, f"{task_id}": y_pred})
+                # ------------------------------------------------------------------
+                # STEP 4: Store predictions & confidences for each task
+                # ------------------------------------------------------------------
+                predictions_df = pd.DataFrame({
+                    "Id": id_col_test,
+                    f"{task_id}": y_pred
+                })
                 confidences_df = pd.DataFrame({
                     "Id": id_col_test,
                     f"Cd0_{task_id}": y_proba[:, 0],
@@ -163,37 +227,42 @@ class EnsemblePipeline:
                 aggregated_confidences[task_id] = confidences_df
 
                 progress.update(task, advance=1)
-                
-                if task_id == "T03":  # For testing purposes
-                    break
-        
-        # Convert unique IDs to DataFrame to serve as the base structure
+
+        # ----------------------------------------------------------------------
+        # STEP 5: Merge into final DataFrame for predictions and confidences
+        # ----------------------------------------------------------------------
+        # Base structure: all unique IDs from every test split
         all_ids_df = pd.DataFrame({"Id": list(all_ids)})
 
-        # Ensure missing task predictions are NaN
+        # Merge predictions
         final_predictions_df = all_ids_df.copy()
-        for task_id, df in aggregated_predictions.items():
-            final_predictions_df = final_predictions_df.merge(df, on="Id", how="outer")  # Ensure missing values are NaN
+        for task_id, df_pred in aggregated_predictions.items():
+            final_predictions_df = final_predictions_df.merge(df_pred, on="Id", how="outer")
 
-        # Ensure missing confidence values are NaN
+        # Merge confidences
         final_confidences_df = all_ids_df.copy()
-        for task_id, df in aggregated_confidences.items():
-            final_confidences_df = final_confidences_df.merge(df, on="Id", how="outer")  # Ensure missing values are NaN
+        for task_id, df_conf in aggregated_confidences.items():
+            final_confidences_df = final_confidences_df.merge(df_conf, on="Id", how="outer")
 
-        # Merge with original class labels (NaN where missing)
+        # Merge with original class labels
         final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
         final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
-        
+
+        # Path info for outputs
         output_clf = classification_output / f"{classifier.get_classifier_name()}"
+        classifier_name = classifier.get_classifier_name()
+
+        # ----------------------------------------------------------------------
+        # STEP 6: Save results if requested
+        # ----------------------------------------------------------------------
         if save_results:
-            output_clf = classification_output / f"{classifier.get_classifier_name()}" 
             os.makedirs(output_clf, exist_ok=True)
-            
+
             output_run = output_clf / f"run_{run + 1}"
             os.makedirs(output_run, exist_ok=True)
-            
-            output_path_predictions = output_run / f"Predictions.csv"
-            output_path_confidences = output_run / f"Confidences.csv"
+
+            output_path_predictions = output_run / "Predictions.csv"
+            output_path_confidences = output_run / "Confidences.csv"
 
             final_predictions_df.to_csv(output_path_predictions, index=False)
             final_confidences_df.to_csv(output_path_confidences, index=False)
@@ -201,12 +270,20 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
                 self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
-                
-        # remove rows where Class is NaN from final_predictions_df and final_confidences_df
+
+        # ----------------------------------------------------------------------
+        # STEP 7: Drop rows with missing Class (if any)
+        # ----------------------------------------------------------------------
         final_predictions_df = final_predictions_df.dropna(subset=["Class"])
         final_confidences_df = final_confidences_df.dropna(subset=["Class"])
+        
+        accuracy_df = pd.DataFrame([task_accuracies])
 
-        return final_predictions_df, final_confidences_df, output_clf, classifier.get_classifier_name()
+        # # Optionally, to ensure a sorted column order (T01, T02, T03, …):
+        # accuracy_df = accuracy_df.reindex(sorted(accuracy_df.columns), axis=1)
+
+        return final_predictions_df, final_confidences_df, output_clf, classifier_name, accuracy_df
+
     
     def _process_classification_tasks(
         self,
@@ -359,59 +436,108 @@ class EnsemblePipeline:
         return pred_df, conf_df
     
     def load_data(self) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        """Load prediction and confidence data."""
+        """
+        Load prediction and confidence data.
+        If any of the chosen ensemble methods requires confidence,
+        we also load the confidence data.
+        """
         data_loader = DataLoader(self.config)
         predictions_df = data_loader.load_predictions()
-        
+
         confidence_df = None
-        if self.ensemble_method in [EnsembleMethod.WMV, EnsembleMethod.RK]:
+        val_acc = None
+        # Check if at least one of the methods in self.ensemble_methods is WMV or RK
+        if any(method in [EnsembleMethod.WMV, EnsembleMethod.RK, EnsembleMethod.ERK, EnsembleMethod.HC] for method in self.ensemble_methods):
             confidence_df = data_loader.load_confidence()
-            
-        return predictions_df, confidence_df
+            val_acc = data_loader.load_validation_accuracies()
+
+        return predictions_df, confidence_df, val_acc
+
     
     def execute_ensemble_method(
         self,
         method,
         predictions_df: pd.DataFrame,
-        confidence_df: Optional[pd.DataFrame]
+        confidence_df: Optional[pd.DataFrame],
+        accuracy_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Execute the selected ensemble method."""
         method_mapping = {
         EnsembleMethod.MV: lambda: majority_vote.majority_voting(predictions_df, verbose=self.verbose),
         EnsembleMethod.WMV: lambda: self._execute_weighted_majority_voting(predictions_df, confidence_df),
-        EnsembleMethod.RK: lambda: ranking.ranking(predictions_df, confidence_df, verbose=self.verbose),
-        EnsembleMethod.ERK: lambda: entropy_ranking.entropy_ranking(predictions_df, confidence_df, verbose=self.verbose),
-        EnsembleMethod.HC: lambda: hill_climbing.hill_climbing_combine(predictions_df, confidence_df, verbose=self.verbose),
+        EnsembleMethod.RK: lambda: self._execute_ranking(predictions_df, accuracy_df),
+        EnsembleMethod.ERK: lambda: self._execute_entropy_ranking(predictions_df, accuracy_df),
+        EnsembleMethod.HC: lambda: self._execute_hill_climbing(predictions_df),
         EnsembleMethod.SA: lambda: simulated_annealing.simulated_annealing_combine(predictions_df, confidence_df, verbose=self.verbose),
         EnsembleMethod.TS: lambda: tabu_search.tabu_search_combine(predictions_df, confidence_df, verbose=self.verbose)
         }
     
         return method_mapping[method]()
     
+
+    def _execute_ranking(
+        self,
+        predictions_df: pd.DataFrame,
+        accuracy_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """Execute the ranking ensemble method."""
+        if accuracy_df is None:
+            return ranking.ranking(predictions_df, verbose=self.verbose)
+        else:
+            return ranking.ranking(predictions_df, accuracy_df, verbose=self.verbose)    
+        
+    def _execute_entropy_ranking(
+        self,
+        predictions_df: pd.DataFrame,
+        accuracy_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """Execute the entropy ranking ensemble method."""
+        
+        ranking = entropy_ranking.EntropyRanking(predictions_df, accuracy_df)
+        return ranking.run(diversity_weight=0.5, use_accuracy_weighted_ensemble=True, verbose=self.verbose)
+        
+    
     def _execute_weighted_majority_voting(
         self,
         predictions_df: pd.DataFrame,
-        confidence_df: Optional[pd.DataFrame]
+        confidence_df: Optional[pd.DataFrame],
+        accuracy_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Special handling for weighted majority voting method."""
-        try:
-            data_loader = DataLoader(self.config)
-            validation_accuracies_df = data_loader.load_validation_accuracies()
-            self.printer.print_info("Successfully loaded validation accuracies")
-            return weighted_majority_vote.weighted_majority_voting(
-                predictions_df,
-                confidence_df,
-                validation_accuracies_df,
-                verbose=self.verbose
-            )
-        except Exception as e:
-            self.printer.print_warning(f"Could not load validation accuracies: {str(e)}")
-            self.printer.print_warning("Proceeding with confidence scores only")
+        
+        if accuracy_df is None:
             return weighted_majority_vote.weighted_majority_voting(
                 predictions_df,
                 confidence_df,
                 verbose=self.verbose
             )
+        else:
+            return weighted_majority_vote.weighted_majority_voting(
+                predictions_df,
+                confidence_df,
+                accuracy_df,
+                verbose=self.verbose
+            )
+    
+    def _execute_hill_climbing(
+        self,
+        predictions_df: pd.DataFrame,
+        accuracy_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """Execute the hill climbing ensemble method."""
+        
+        if accuracy_df is None:
+            return hill_climbing.hill_climbing_combine(
+                predictions_df,
+                verbose=self.verbose
+            )
+        else:
+            return hill_climbing.hill_climbing_combine(
+                predictions_df,
+                accuracy_df,
+                verbose=self.verbose
+            )
+        
     
     def save_results(
         self,

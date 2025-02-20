@@ -44,53 +44,54 @@ def calculate_diversity_score(matrix: pd.DataFrame) -> np.ndarray:
     
     return diversity_scores
 
+
 def create_task_rankings(
     matrix: pd.DataFrame, 
-    confidence_df: pd.DataFrame = None,
+    accuracy_df: pd.DataFrame = None,
     diversity_weight: float = 0.5
 ) -> pd.DataFrame:
-    """Create task rankings based on diversity and confidence scores."""
+    """Create task rankings based on diversity and accuracy scores."""
+    
+    print(f"Accuracy df:\n {accuracy_df}")
+    
     # Calculate diversity scores
     diversity_scores = calculate_diversity_score(matrix)
     tasks = matrix.columns.tolist()
 
-    # Handle confidence scores
-    if confidence_df is not None:
-        # Extract confidence columns matching matrix tasks
-        conf_scores = []
+    # Handle accuracy scores
+    accuracy_scores = np.zeros(len(diversity_scores))
+    if accuracy_df is not None:
+        accuracy_scores = []
         for task in tasks:
-            conf_col = f"Cd1_{task}"  # Match the confidence column format
-            if conf_col in confidence_df.columns:
-                conf_scores.append(confidence_df[conf_col].mean())  # Get mean confidence per task
+            if task in accuracy_df.columns:
+                accuracy_scores.append(accuracy_df[task].values[0])  # Extract accuracy value
             else:
-                conf_scores.append(0)  # If task is missing, assign zero confidence
-        conf_scores = np.array(conf_scores)
-    else:
-        conf_scores = np.zeros(len(diversity_scores))
+                accuracy_scores.append(0)  # Default if missing
+        accuracy_scores = np.array(accuracy_scores)
 
-    # Normalize scores to avoid scale imbalance
-    diversity_scores = np.array(diversity_scores)
-    if np.ptp(diversity_scores) > 0:  # Avoid division by zero
-        diversity_scores = (diversity_scores - np.min(diversity_scores)) / np.ptp(diversity_scores)
+    # Normalize scores
+    def normalize(arr):
+        return (arr - np.min(arr)) / np.ptp(arr) if np.ptp(arr) > 0 else arr
+    
+    diversity_scores = normalize(diversity_scores)
+    accuracy_scores = normalize(accuracy_scores)
 
-    if np.ptp(conf_scores) > 0:
-        conf_scores = (conf_scores - np.min(conf_scores)) / np.ptp(conf_scores)
-
-    # Calculate combined scores
+    # Compute final ranking score
     combined_scores = (
         diversity_weight * diversity_scores + 
-        (1 - diversity_weight) * conf_scores
+        (1 - diversity_weight) * accuracy_scores
     )
 
     # Create and sort rankings
     rankings_df = pd.DataFrame({
         'Task': tasks,
         'Diversity_Score': diversity_scores,
-        'Confidence_Score': conf_scores,
+        'Accuracy_Score': accuracy_scores,
         'Overall_Score': combined_scores
     })
 
     return rankings_df.sort_values('Overall_Score', ascending=False, ignore_index=True)
+
 
 def get_ensemble_prediction(predictions_df: pd.DataFrame, task_columns: List[str]) -> pd.Series:
     """Get ensemble prediction using selected tasks."""
@@ -103,13 +104,13 @@ def get_ensemble_prediction(predictions_df: pd.DataFrame, task_columns: List[str
         return predictions[0]
     return predictions
 
-def ranking(predictions_df: pd.DataFrame, confidence_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+def ranking(predictions_df: pd.DataFrame, accuracy_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     """
     Implement ranking-based ensemble method.
     
     Args:
         predictions_df: DataFrame with predictions
-        confidence_df: DataFrame with confidence scores
+        accuracy_df: DataFrame with confidence scores
         verbose: Whether to print detailed information
     
     Returns:
@@ -129,14 +130,13 @@ def ranking(predictions_df: pd.DataFrame, confidence_df: pd.DataFrame, verbose: 
     
     if verbose:
         print(f"Common matrix:\n {common_matrix}")
-        print(f"Confidence df:\n {confidence_df}")
+        print(f"Confidence df:\n {accuracy_df}")
     
-    if confidence_df.empty:
+    if accuracy_df.empty:
         raise ValueError("Error: Confidence DataFrame is empty. Check input data.")
 
-    
     # Create rankings
-    rankings = create_task_rankings(common_matrix, confidence_df)
+    rankings = create_task_rankings(common_matrix, accuracy_df)
     
     if verbose:
         print("\n[bold]Task Rankings:[/bold]")
@@ -156,9 +156,17 @@ def ranking(predictions_df: pd.DataFrame, confidence_df: pd.DataFrame, verbose: 
     # Update DataFrame with predictions
     result_df = predictions_df.copy()
     result_df['predicted_class'] = ensemble_predictions
-    
+
+    # Handle NaN values: Fill with the most common class or fallback to 0
+    if result_df['predicted_class'].isna().any():
+        most_common_class = result_df['predicted_class'].mode().iloc[0] if not result_df['predicted_class'].mode().empty else 0
+        result_df['predicted_class'].fillna(most_common_class, inplace=True)
+
+    # Convert to integer
+    result_df['predicted_class'] = result_df['predicted_class'].astype(int)
+
     if verbose:
         print("\n[bold]Final Predictions:[/bold]")
         print(result_df)
-    
+
     return result_df

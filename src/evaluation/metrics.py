@@ -94,7 +94,18 @@ def evaluate_predictions(predictions_df: pd.DataFrame, verbose: bool = False) ->
     # Find matching columns in the DataFrame
     found_true_col = next((col for col in possible_true_cols if col in predictions_df.columns), None)
     found_pred_col = next((col for col in possible_pred_cols if col in predictions_df.columns), None)
+    
+    print(f"Found true column: {found_true_col}")
+    print(f"Found pred column: {found_pred_col}")
 
+    print(f"Predictions:\n{predictions_df}")
+    
+    # Check if there are NaN values in the columns
+    if predictions_df[found_true_col].isnull().values.any() or predictions_df[found_pred_col].isnull().values.any():
+        # print(f"Predictions found: {predictions_df[found_true_col].to_numpy()}")
+        print(f"Predictions found: {predictions_df[found_pred_col].to_numpy()}")
+        raise ValueError("NaN values found in the columns. Please handle them before evaluation.")
+    
     if not found_true_col or not found_pred_col:
         raise ValueError("Could not find the required columns in the DataFrame.")
 

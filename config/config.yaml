@@ -4,12 +4,12 @@ paths:
 
 data:
   predictions:
-    file_name: alzh_pred_wide.csv # predictions_data.csv
+    file_name: ConvNeXtSmall_predictions.csv # alzh_pred_wide.csv # predictions_data.csv
     encoding: utf-8
     separator: ","
 
   confidence:
-    file_name: confidence_degrees.csv
+    file_name: ConvNeXtSmall_confidence_degrees.csv  #confidence_degrees.csv
     encoding: utf-8
     separator: ","
   
@@ -17,18 +17,18 @@ data:
     folder: ConvNeXtSmall_features
   
   validation_acc:
-    filename: validation_accuracies.csv
+    filename: ConvNeXtSmall_val_acc.csv
     encoding: utf-8
     separator: ","
 
 settings:
   verbose: false
-  combining_technique: [MV, WMV, RK, ERK, HC]  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS [MV, WMV, RK, ERK, HC]
+  combining_technique: [ERK]  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS [MV, WMV, RK, ERK, HC]
   save_individual_results: false
 
 classification:
-  enabled: true          # Whether to run classification before ensemble
-  classifier: rf         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
+  enabled: false          # Whether to run classification before ensemble
+  classifier: xgb         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.2         # Proportion of data to use for testing
-  n_runs: 30              # Number of runs with different seeds
+  n_runs: 1              # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility

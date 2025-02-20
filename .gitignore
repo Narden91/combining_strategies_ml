@@ -19,3 +19,5 @@ data/
 output/
 outputs/
 catboost_info/
+Results_*
+__pycache__/
