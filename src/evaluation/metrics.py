@@ -8,13 +8,15 @@ from rich import print
 class EvaluationMetrics:
     def __init__(self, y_true: np.ndarray, y_pred: np.ndarray):
         """Initialize with true and predicted labels."""
-        self.y_true = y_true
-        self.y_pred = y_pred
+        self.y_true = np.asarray(y_true, dtype=int)
+        self.y_pred = np.asarray(y_pred, dtype=int)
         self.confusion_matrix = self._compute_confusion_matrix()
         self.tn, self.fp, self.fn, self.tp = self.confusion_matrix.ravel()
         
     def _compute_confusion_matrix(self) -> np.ndarray:
         """Compute the confusion matrix."""
+        print(f"True: {self.y_true}")
+        print(f"Pred: {self.y_pred}")
         return confusion_matrix(self.y_true, self.y_pred)
     
     def get_confusion_matrix(self) -> Dict[str, int]:
@@ -95,10 +97,10 @@ def evaluate_predictions(predictions_df: pd.DataFrame, verbose: bool = False) ->
     found_true_col = next((col for col in possible_true_cols if col in predictions_df.columns), None)
     found_pred_col = next((col for col in possible_pred_cols if col in predictions_df.columns), None)
     
-    print(f"Found true column: {found_true_col}")
-    print(f"Found pred column: {found_pred_col}")
+    # print(f"Found true column: {found_true_col}")
+    # print(f"Found pred column: {found_pred_col}")
 
-    print(f"Predictions:\n{predictions_df}")
+    # print(f"Predictions:\n{predictions_df}")
     
     # Check if there are NaN values in the columns
     if predictions_df[found_true_col].isnull().values.any() or predictions_df[found_pred_col].isnull().values.any():
@@ -110,8 +112,8 @@ def evaluate_predictions(predictions_df: pd.DataFrame, verbose: bool = False) ->
         raise ValueError("Could not find the required columns in the DataFrame.")
 
     evaluator = EvaluationMetrics(
-        predictions_df[found_true_col].values,
-        predictions_df[found_pred_col].values
+        np.asarray(predictions_df[found_true_col].values, dtype=int),
+        np.asarray(predictions_df[found_pred_col].values, dtype=int)
     )
     
     confusion = evaluator.get_confusion_matrix()

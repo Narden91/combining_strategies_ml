@@ -3,10 +3,10 @@ import numpy as np
 import pandas as pd
 
 
-def weighted_majority_voting(predictions_df, confidence_df, validation_accuracies_df=None, verbose=False):
+def weighted_majority_voting(predictions_df, validation_accuracies_df=None, verbose=False):
     """
-    Enhanced weighted majority voting implementation that properly handles both classes (0 and 1)
-    while incorporating confidence scores and validation accuracies.
+    Weighted majority voting implementation that properly handles both classes (0 and 1)
+    while incorporating validation accuracies only.
     Missing prediction values (NaN) are ignored in the voting process.
     
     Parameters:
@@ -14,8 +14,6 @@ def weighted_majority_voting(predictions_df, confidence_df, validation_accuracie
         (Assumes that the prediction columns are located from the second column to the second-to-last column,
          with the first column typically being an identifier such as 'subject' and the last column reserved 
          for an output if present.)
-    confidence_df (pandas.DataFrame): DataFrame containing confidence scores.
-        (Assumes that the corresponding confidence columns start with 'Cd1_'.)
     validation_accuracies_df (pandas.DataFrame): DataFrame containing validation accuracies for each task.
         (If provided, the validation accuracy for each task is used to adjust the weight.)
     verbose (bool): If True, prints additional debugging information.
@@ -33,35 +31,23 @@ def weighted_majority_voting(predictions_df, confidence_df, validation_accuracie
     valid_mask = ~np.isnan(X)  # True where predictions are valid
     
     # -------------------------------------------------------------------
-    # 2. Get confidence scores.
-    #    We assume the confidence columns start with 'Cd1_'.
-    # -------------------------------------------------------------------
-    conf_cols = [col for col in confidence_df.columns if col.startswith('Cd1_')]
-    confidences = confidence_df[conf_cols].to_numpy()  # Expected to match the shape of X
-    
-    # -------------------------------------------------------------------
-    # 3. Prepare weights by optionally incorporating validation accuracies.
+    # 2. Prepare weights using validation accuracies.
+    #    If validation accuracies are provided, use them; otherwise, default to 1.0.
     # -------------------------------------------------------------------
     if validation_accuracies_df is not None:
-        # For each prediction column (assumed to be in predictions_df.iloc[:, 1:-1]),
-        # get its corresponding validation accuracy. The code assumes that by replacing
-        # 'T' in the column name you can match a column name in validation_accuracies_df.
         accuracies = []
         for col in predictions_df.columns[1:-1]:
-            task_name = col.replace('T', '')  # adjust as needed to match your validation accuracies columns
+            task_name = col.replace('T', '')  # Adjust as needed to match validation accuracies columns.
             if task_name in validation_accuracies_df.columns:
                 accuracies.append(validation_accuracies_df[task_name].iloc[0])
             else:
                 accuracies.append(1.0)
-        # Reshape to (1, n_tasks) so that broadcasting works with confidences.
-        accuracies = np.array(accuracies).reshape(1, -1)
-        # Combine confidences and accuracies. Taking the square root moderates the effect.
-        weights = np.sqrt(confidences * accuracies)
+        weights = np.array(accuracies).reshape(1, -1)
     else:
-        weights = confidences
+        weights = np.ones((1, X.shape[1]))
     
     # -------------------------------------------------------------------
-    # 4. Calculate weighted votes for each class, ignoring NaN predictions.
+    # 3. Calculate weighted votes for each class, ignoring NaN predictions.
     #    For valid predictions, class 1 gets a vote proportional to X and
     #    class 0 gets a vote proportional to (1 - X). For NaN values, both contribute 0.
     # -------------------------------------------------------------------
@@ -73,14 +59,14 @@ def weighted_majority_voting(predictions_df, confidence_df, validation_accuracie
     sum_class0 = np.sum(class0_votes, axis=1)
     
     # -------------------------------------------------------------------
-    # 5. Decide the predicted class.
+    # 4. Decide the predicted class.
     #    If the weighted vote for class 1 is greater than or equal to class 0,
     #    choose class 1 (this serves as the tie-breaker).
     # -------------------------------------------------------------------
     majority_votes = (sum_class1 >= sum_class0).astype(np.int8)
     
     # -------------------------------------------------------------------
-    # 6. Update the predictions DataFrame with the predicted class.
+    # 5. Update the predictions DataFrame with the predicted class.
     # -------------------------------------------------------------------
     result_df = predictions_df.copy()
     result_df.loc[:, 'predicted_class'] = majority_votes
@@ -97,3 +83,4 @@ def weighted_majority_voting(predictions_df, confidence_df, validation_accuracie
         print(result_df)
     
     return result_df
+

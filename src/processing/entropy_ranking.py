@@ -7,7 +7,7 @@ from rich import print
 
 
 class DiversityMetrics:
-    """Enhanced collection of diversity metrics for ensemble learning."""
+    """Collection of diversity metrics for ensemble learning."""
     
     @staticmethod
     def disagreement_measure(predictions_df: pd.DataFrame, task1: str, task2: str) -> float:
@@ -125,7 +125,7 @@ class AdaptiveWeightCalculator:
         self.task_cols = [col for col in predictions_df.columns if col.startswith('T')]
 
     def calculate_entropy_weights(self) -> Dict[str, float]:
-        # For each classifier, compute the (binary) prediction entropy
+        """Calculate weights based on average entropy of predictions."""
         entropies = []
         for col in self.task_cols:
             valid_preds = self.predictions_df[col].dropna()
@@ -134,26 +134,23 @@ class AdaptiveWeightCalculator:
                 probabilities = counts / len(valid_preds)
                 entropies.append(entropy(probabilities))
         if not entropies:
-            # fallback
             return {'disagreement': 0.30, 'correlation': 0.25, 'kappa': 0.25, 'double_fault': 0.20, 'q_statistic': 0.0}
+        
         mean_entropy = np.mean(entropies)
-        max_entropy = np.log(2)  # for binary
+        max_entropy = np.log(2)
         ratio = mean_entropy / max_entropy
 
-        # Example weighting
-        weights = {
-            'disagreement': 0.3,
-            'correlation': 0.2,
-            'kappa': 0.2,
-            'double_fault': 0.2,
+        # Adjust weights with z-score normalization or a dynamic function based on ratio
+        base_weights = {
+            'disagreement': 0.3 * (1 + ratio),
+            'correlation': 0.2 * (1 - ratio),
+            'kappa': 0.2 * (1 - ratio),
+            'double_fault': 0.2 * (1 - ratio),
             'q_statistic': 0.1
         }
-        # Could adapt them by ratio if you like, or leave them fixed
-        # e.g., weights['disagreement'] *= (1 + ratio * 0.1) etc.
-
-        # Make sure sum=1
-        total = sum(weights.values())
-        return {k: v / total for k, v in weights.items()}
+        adjusted = {k: v * (1 + ratio * 0.1) for k, v in base_weights.items()}
+        total = sum(adjusted.values())
+        return {k: v / total for k, v in adjusted.items()}
 
 
 class EntropyRanking:
@@ -178,26 +175,26 @@ class EntropyRanking:
     def calculate_diversity_matrix(self) -> pd.DataFrame:
         """Combine multiple diversity measures into a single matrix via self.diversity_weights."""
         n = len(self.task_cols)
-        # separate matrices
-        mat = {
-            'disagreement': np.zeros((n, n)),
-            'correlation': np.zeros((n, n)),
-            'kappa': np.zeros((n, n)),
-            'double_fault': np.zeros((n, n)),
-            'q_statistic': np.zeros((n, n))
-        }
-        for i, t1 in enumerate(self.task_cols):
-            for j, t2 in enumerate(self.task_cols):
-                if i != j:
-                    mat['disagreement'][i,j] = self.metrics.disagreement_measure(self.predictions_df, t1, t2)
-                    mat['correlation'][i,j]  = self.metrics.correlation_measure(self.predictions_df, t1, t2)
-                    mat['kappa'][i,j]       = self.metrics.kappa_measure(self.predictions_df, t1, t2)
-                    mat['double_fault'][i,j]= self.metrics.double_fault(self.predictions_df, t1, t2)
-                    mat['q_statistic'][i,j] = self.metrics.q_statistic(self.predictions_df, t1, t2)
-        # Weighted combination
         combined = np.zeros((n, n))
-        for metric, w in self.diversity_weights.items():
-            combined += w * mat[metric]
+        # Precompute masks for each classifier column pair
+        for i in range(n):
+            for j in range(i+1, n):
+                mask = self.predictions_df[[self.task_cols[i], self.task_cols[j]]].notna().all(axis=1)
+                if not mask.any():
+                    metric_values = {key: 0.0 for key in self.diversity_weights}
+                else:
+                    metric_values = {
+                        'disagreement': self.metrics.disagreement_measure(self.predictions_df, self.task_cols[i], self.task_cols[j]),
+                        'correlation':  self.metrics.correlation_measure(self.predictions_df, self.task_cols[i], self.task_cols[j]),
+                        'kappa':        self.metrics.kappa_measure(self.predictions_df, self.task_cols[i], self.task_cols[j]),
+                        'double_fault': self.metrics.double_fault(self.predictions_df, self.task_cols[i], self.task_cols[j]),
+                        'q_statistic':  self.metrics.q_statistic(self.predictions_df, self.task_cols[i], self.task_cols[j])
+                    }
+                # Combine metrics using weights
+                score = sum(self.diversity_weights[k] * metric_values[k] for k in metric_values)
+                combined[i, j] = score
+                combined[j, i] = score  # mirror symmetric value
+                
         return pd.DataFrame(combined, index=self.task_cols, columns=self.task_cols)
 
     def run(

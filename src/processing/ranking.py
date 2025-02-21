@@ -51,9 +51,7 @@ def create_task_rankings(
     diversity_weight: float = 0.5
 ) -> pd.DataFrame:
     """Create task rankings based on diversity and accuracy scores."""
-    
-    print(f"Accuracy df:\n {accuracy_df}")
-    
+        
     # Calculate diversity scores
     diversity_scores = calculate_diversity_score(matrix)
     tasks = matrix.columns.tolist()

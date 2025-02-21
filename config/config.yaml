@@ -1,10 +1,11 @@
 paths:
   data: ${hydra:runtime.cwd}/data
-  output: ${hydra:runtime.cwd}/output
+  output: ${hydra:runtime.cwd}/Results
 
 data:
+  dataset: ConvNextSmall
   predictions:
-    file_name: ConvNeXtSmall_predictions.csv # alzh_pred_wide.csv # predictions_data.csv
+    file_name: ConvNeXtSmall_predictions.csv # predictions_data.csv
     encoding: utf-8
     separator: ","
 
@@ -23,12 +24,12 @@ data:
 
 settings:
   verbose: false
-  combining_technique: [ERK]  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS [MV, WMV, RK, ERK, HC]
+  combining_technique: [MV, WMV, RK, ERK, HC]  # Options: MV, WMV, RK, ERK (Entropy Ranking), HC, SA, TS [MV, WMV, RK, ERK, HC]
   save_individual_results: false
 
 classification:
-  enabled: false          # Whether to run classification before ensemble
+  enabled: true          # Whether to run classification before ensemble
   classifier: xgb         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.2         # Proportion of data to use for testing
-  n_runs: 1              # Number of runs with different seeds
+  n_runs: 20             # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility

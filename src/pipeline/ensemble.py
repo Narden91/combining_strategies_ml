@@ -157,7 +157,6 @@ class EnsemblePipeline:
         original_classes = None      # We'll store the reference y_test for merging
 
         # Rich progress bar
-        from rich.progress import Progress
         with Progress() as progress:
             task = progress.add_task("[cyan]Processing tasks...", total=len(csv_files))
 
@@ -227,6 +226,9 @@ class EnsemblePipeline:
                 aggregated_confidences[task_id] = confidences_df
 
                 progress.update(task, advance=1)
+                
+                # if task_id == "T20":
+                #     break
 
         # ----------------------------------------------------------------------
         # STEP 5: Merge into final DataFrame for predictions and confidences
@@ -282,7 +284,7 @@ class EnsemblePipeline:
         # # Optionally, to ensure a sorted column order (T01, T02, T03, …):
         # accuracy_df = accuracy_df.reindex(sorted(accuracy_df.columns), axis=1)
 
-        return final_predictions_df, final_confidences_df, output_clf, classifier_name, accuracy_df
+        return final_predictions_df, final_confidences_df, classifier_name, accuracy_df
 
     
     def _process_classification_tasks(
@@ -464,16 +466,31 @@ class EnsemblePipeline:
         """Execute the selected ensemble method."""
         method_mapping = {
         EnsembleMethod.MV: lambda: majority_vote.majority_voting(predictions_df, verbose=self.verbose),
-        EnsembleMethod.WMV: lambda: self._execute_weighted_majority_voting(predictions_df, confidence_df),
+        EnsembleMethod.WMV: lambda: self._execute_weighted_majority_voting(predictions_df, accuracy_df),
         EnsembleMethod.RK: lambda: self._execute_ranking(predictions_df, accuracy_df),
         EnsembleMethod.ERK: lambda: self._execute_entropy_ranking(predictions_df, accuracy_df),
-        EnsembleMethod.HC: lambda: self._execute_hill_climbing(predictions_df),
-        EnsembleMethod.SA: lambda: simulated_annealing.simulated_annealing_combine(predictions_df, confidence_df, verbose=self.verbose),
-        EnsembleMethod.TS: lambda: tabu_search.tabu_search_combine(predictions_df, confidence_df, verbose=self.verbose)
+        EnsembleMethod.HC: lambda: self._execute_hill_climbing(predictions_df, accuracy_df),
+        EnsembleMethod.SA: lambda: self._execute_simulated_annealing(predictions_df, accuracy_df),
+        EnsembleMethod.TS: lambda: self._execute_tabu_search(predictions_df, accuracy_df) 
         }
     
         return method_mapping[method]()
     
+    def _execute_simulated_annealing(
+        self,
+        predictions_df: pd.DataFrame,
+        accuracy_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """Execute the simulated annealing ensemble method."""
+        return simulated_annealing.simulated_annealing_combine(predictions_df, accuracy_df, verbose=self.verbose) #TODO: Refactor function
+    
+    def _execute_tabu_search(
+        self,
+        predictions_df: pd.DataFrame,
+        accuracy_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """Execute the simulated annealing ensemble method."""
+        return tabu_search.tabu_search_combine(predictions_df, accuracy_df, verbose=self.verbose) #TODO: Refactor function
 
     def _execute_ranking(
         self,
@@ -492,7 +509,6 @@ class EnsemblePipeline:
         accuracy_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Execute the entropy ranking ensemble method."""
-        
         ranking = entropy_ranking.EntropyRanking(predictions_df, accuracy_df)
         return ranking.run(diversity_weight=0.5, use_accuracy_weighted_ensemble=True, verbose=self.verbose)
         
@@ -500,7 +516,6 @@ class EnsemblePipeline:
     def _execute_weighted_majority_voting(
         self,
         predictions_df: pd.DataFrame,
-        confidence_df: Optional[pd.DataFrame],
         accuracy_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Special handling for weighted majority voting method."""
@@ -508,13 +523,11 @@ class EnsemblePipeline:
         if accuracy_df is None:
             return weighted_majority_vote.weighted_majority_voting(
                 predictions_df,
-                confidence_df,
                 verbose=self.verbose
             )
         else:
             return weighted_majority_vote.weighted_majority_voting(
                 predictions_df,
-                confidence_df,
                 accuracy_df,
                 verbose=self.verbose
             )
@@ -525,19 +538,17 @@ class EnsemblePipeline:
         accuracy_df: Optional[pd.DataFrame]
     ) -> pd.DataFrame:
         """Execute the hill climbing ensemble method."""
+                
+        custom_config = hill_climbing.HillClimbingConfig(
+            max_iterations=500,
+            num_neighbors=100,
+            patience=100,
+            noise_scale=0.25,
+            threshold_range=(0.35, 0.65)
+        )
         
-        if accuracy_df is None:
-            return hill_climbing.hill_climbing_combine(
-                predictions_df,
-                verbose=self.verbose
-            )
-        else:
-            return hill_climbing.hill_climbing_combine(
-                predictions_df,
-                accuracy_df,
-                verbose=self.verbose
-            )
-        
+        return hill_climbing.hill_climbing_combine(predictions_df, accuracy_df, custom_config, verbose=self.verbose)
+            
     
     def save_results(
         self,

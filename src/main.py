@@ -18,7 +18,7 @@ def main(cfg: DictConfig) -> None:
     """Main entry point for the application."""
     pipeline = EnsemblePipeline(cfg)
     printer = ConsolePrinter()
-    
+
     try:
         printer.print_header("Application Started")
         if cfg.settings.verbose:
@@ -36,7 +36,7 @@ def main(cfg: DictConfig) -> None:
                 
             # Handle classification or load existing data
             if cfg.classification.enabled:
-                predictions_df, confidence_df, output_clf, classifier_name, acc_df = pipeline.run_classification(run, run_seed, cfg.settings.save_individual_results)
+                predictions_df, confidence_df, classifier_name, acc_df = pipeline.run_classification(run, run_seed, cfg.settings.save_individual_results)
             else:
                 predictions_df, confidence_df, acc_df = pipeline.load_data()
                                 
@@ -63,9 +63,13 @@ def main(cfg: DictConfig) -> None:
         
         # Save aggregated metrics CSV
         if cfg.classification.enabled:
-            metrics_output_path = Path(cfg.paths.output) / f"Metrics_{classifier_name}_ALL_METHODS.csv"
+            metrics_output_path = Path(cfg.paths.output) / f"{cfg.data.dataset}"/ f"ClassificationML" 
+            metrics_output_path.mkdir(parents=True, exist_ok=True)
+            metrics_output_path = metrics_output_path / f"Metrics_{classifier_name}_ALL_METHODS.csv"
         else:
-            metrics_output_path = Path(cfg.paths.output) / "Metrics_ALL_METHODS.csv"
+            metrics_output_path = Path(cfg.paths.output) / f"{cfg.data.dataset}"/ f"Ensemble" 
+            metrics_output_path.mkdir(parents=True, exist_ok=True)
+            metrics_output_path = metrics_output_path / f"Metrics_ALL_METHODS.csv"
 
         grouped = all_metrics_df.groupby("Method")
         
