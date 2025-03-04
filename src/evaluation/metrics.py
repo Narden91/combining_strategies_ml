@@ -15,8 +15,6 @@ class EvaluationMetrics:
         
     def _compute_confusion_matrix(self) -> np.ndarray:
         """Compute the confusion matrix."""
-        print(f"True: {self.y_true}")
-        print(f"Pred: {self.y_pred}")
         return confusion_matrix(self.y_true, self.y_pred)
     
     def get_confusion_matrix(self) -> Dict[str, int]:

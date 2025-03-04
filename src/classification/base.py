@@ -12,13 +12,12 @@ import os
 class BaseClassifier(ABC):
     """Abstract base class for all classifiers."""
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42):
+    def __init__(self, task_id: str, random_state: int = 42):
         """
         Initialize the classifier.
         
         Args:
             task_id: Identifier for the specific task
-            output_dir: Base directory for saving outputs
             random_state: Random seed for reproducibility
         """
         self.task_id = task_id
@@ -43,38 +42,6 @@ class BaseClassifier(ABC):
             Preprocessed features as numpy array
         """
         return self.scaler.fit_transform(X)
-        
-    def save_run_results(self, run_id: int, metrics: Dict, 
-                        predictions: np.ndarray, probabilities: np.ndarray,
-                        true_labels: np.ndarray) -> None:
-        """
-        Save results from a single run.
-        
-        Args:
-            run_id: Identifier for the specific run
-            metrics: Dictionary of performance metrics
-            predictions: Array of predictions
-            probabilities: Array of prediction probabilities
-            true_labels: Array of true labels
-        """
-        run_dir = self.output_dir / f"run_{run_id}"
-        run_dir.mkdir(exist_ok=True)
-        
-        # Save metrics
-        with open(run_dir / "metrics.json", 'w') as f:
-            json.dump(metrics, f, indent=4)
-        
-        # Save predictions and probabilities
-        np.save(run_dir / "predictions.npy", predictions)
-        np.save(run_dir / "probabilities.npy", probabilities)
-        np.save(run_dir / "true_labels.npy", true_labels)
-        
-        # Save as CSV for easier viewing
-        pd.DataFrame({
-            'true_label': true_labels,
-            'predicted_label': predictions,
-            'probability_class_1': probabilities[:, 1]
-        }).to_csv(run_dir / "results.csv", index=False)
         
     def fit(self, X: pd.DataFrame, y: pd.Series) -> 'BaseClassifier':
         """
@@ -160,19 +127,17 @@ class BaseClassifier(ABC):
 class ClassificationManager:
     """Manager class to handle the classification process."""
     
-    def __init__(self, data_path: Path, output_base: Path, 
+    def __init__(self, data_path: Path, 
                  n_runs: int = 30, base_seed: int = 42):
         """
         Initialize the classification manager.
         
         Args:
             data_path: Path to the feature vector files
-            output_base: Base path for saving outputs
             n_runs: Number of runs with different seeds
             base_seed: Base random seed
         """
         self.data_path = data_path
-        self.output_base = output_base
         self.n_runs = n_runs
         self.base_seed = base_seed
                 
@@ -192,14 +157,6 @@ class ClassificationManager:
 
         df = pd.read_csv(file_path)
 
-        # # Identify the ID column (e.g., 'id', 'Id', etc.) and store it separately
-        # possible_id_columns = [col for col in df.columns if "id" in col.lower()]
-        # id_col = None
-        # if possible_id_columns:
-        #     id_col_name = possible_id_columns[0]
-        #     id_col = df[id_col_name].copy()  # Keep a copy
-        #     df.drop(columns=possible_id_columns, inplace=True)
-
         # Identify the correct class column (e.g., 'class', 'Class', 'label', 'Label')
         possible_class_columns = [col for col in df.columns if col.lower() in ["class", "label"]]
         if not possible_class_columns:
@@ -212,8 +169,6 @@ class ClassificationManager:
         X = df.drop(columns=[class_column])  # Drop the identified class column from features
 
         return X, y
-        # return X, y, id_col
-
         
     def stratified_split(self, X: pd.DataFrame, y: pd.Series, 
                         test_size: float, random_state: int) -> Tuple:
@@ -237,8 +192,6 @@ class ClassificationManager:
         min_test_samples = int(min_class_size * test_size)
         
         if min_test_samples < 1:
-            # If we can't maintain stratification, fall back to shuffle split
-            # but warn about it
             print(f"[yellow]Warning: Insufficient samples in minority class "
                   f"(size={min_class_size}) for stratified split with "
                   f"test_size={test_size}. Using shuffled split instead.[/yellow]")
@@ -286,10 +239,6 @@ class ClassificationManager:
         classifier.fit(X_train, y_train)
         
         y_pred = classifier.predict(X_test)
-
-        # Ensure prediction data retains feature names
-        # X_test_df = pd.DataFrame(X_test, columns=X_train.columns)
-        # y_test = y_test.values
         
         try:
             y_proba = classifier.predict_proba(X_test)
@@ -302,59 +251,6 @@ class ClassificationManager:
             y_proba[:, 0] = 1 - y_pred  # Invert to simulate probabilities
 
         return classifier, y_pred, y_proba, id_col, y_test
-
-    
-    # def train_classifier(self, classifier: BaseClassifier, X: pd.DataFrame, 
-    #                     y: pd.Series, test_size: float = 0.2) -> Dict:
-    #     """
-    #     Train a classifier with multiple runs and return aggregated results.
-        
-    #     Args:
-    #         classifier: Classifier instance to train
-    #         X: Training features
-    #         y: Training labels
-    #         test_size: Proportion of data to use for testing
-            
-    #     Returns:
-    #         Dictionary of aggregated performance metrics
-    #     """
-    #     aggregated_metrics = []
-    #     final_predictions = []
-    #     final_probabilities = []
-    #     final_true_labels = []
-
-    #     for run in range(self.n_runs):
-    #         run_seed = self.base_seed + run
-
-    #         # Ensure column names are consistent
-    #         X.columns = X.columns.str.strip()
-    #         X_train, X_test, y_train, y_test = self.stratified_split(X, y, test_size, run_seed)
-
-    #         # Re-align column order in test set with train set
-    #         X_test = X_test[X_train.columns]
-
-    #         classifier.random_state = run_seed
-    #         classifier.fit(X_train, y_train)
-
-    #         # 🔹 Ensure prediction data retains feature names
-    #         X_test_df = pd.DataFrame(X_test, columns=X_train.columns)
-
-    #         y_pred = classifier.predict(X_test_df)
-    #         y_prob = classifier.predict_proba(X_test_df)
-
-    #         classifier.save_run_results(run, {}, y_pred, y_prob, y_test.values)
-
-    #         aggregated_metrics.append({'accuracy': np.mean(y_pred == y_test), 'run_id': run, 'seed': run_seed})
-    #         final_predictions.append(y_pred)
-    #         final_probabilities.append(y_prob)
-    #         final_true_labels.append(y_test.values)
-
-    #     return {
-    #         'metrics': {'mean_accuracy': np.mean([m['accuracy'] for m in aggregated_metrics])},
-    #         'predictions': final_predictions,
-    #         'probabilities': final_probabilities,
-    #         'true_labels': final_true_labels
-    #     }
 
 def get_available_tasks(data_path: Path) -> List[str]:
     """

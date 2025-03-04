@@ -7,6 +7,7 @@ import numpy as np
 from omegaconf import DictConfig, ListConfig
 
 from rich.progress import Progress
+from sklearn.metrics import precision_score, recall_score, confusion_matrix, matthews_corrcoef
 
 from utils.printer import ConsolePrinter
 from data_loader.loader import DataLoader
@@ -55,6 +56,7 @@ class EnsemblePipeline:
         self.config = config
         self.printer = ConsolePrinter()
         self.verbose = config.settings.verbose
+        self.clf_folder = config.classification.classifier
         
         if isinstance(config.settings.combining_technique, str):
             # Single method
@@ -69,11 +71,6 @@ class EnsemblePipeline:
             ]
         else:
             raise ValueError("Invalid 'combining_technique'. Must be str or list[str].")
-
-        
-        # self.ensemble_method = EnsembleMethod.from_string(
-        #     config.settings.combining_technique
-        # )
         
     def setup_directories(self) -> None:
         """Create necessary output directories."""
@@ -82,7 +79,7 @@ class EnsemblePipeline:
             if self.verbose:
                 self.printer.print_directory_creation(path_name, path_value)
     
-    def run_classification(self, run: int, seed: int, save_results: bool) -> Tuple[pd.DataFrame, pd.DataFrame, Path, str]:
+    def run_classification(self, run: int, seed: int, metrics_output_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame, Path, str, pd.DataFrame]:
         """
         Run the classification phase for all tasks, ensuring that only IDs common
         to every task appear in the final test sets.
@@ -98,7 +95,8 @@ class EnsemblePipeline:
         Args:
             run (int): The run number (0-based).
             seed (int): The base random seed for reproducibility.
-            save_results (bool): Whether to save intermediate results (CSV files).
+            metrics_output_path (Path): The root directory where results will be saved,
+                with a subfolder named 'run_<run_number>'.
 
         Returns:
         Tuple[pd.DataFrame, pd.DataFrame, Path, str, pd.DataFrame]:
@@ -106,38 +104,38 @@ class EnsemblePipeline:
               from every task, merged on ID.
             - final_confidences_df: DataFrame containing the final confidence
               scores from every task, merged on ID.
-            - output_clf: The path to the final classifier output directory.
+            - output_clf: The path to the run-specific output directory (metrics_output_path/run_<number>).
             - classifier_name: Name of the classifier used.
             - accuracy_df: A one-row DataFrame containing accuracy values for each
-              task, with columns labeled by task ID 
+              task, with columns labeled by task ID.
         """
         if self.verbose:
             self.printer.print_info("Starting classification phase...")
 
         # Paths setup
         feature_vector_path = Path(self.config.paths.data) / self.config.data.feature_vector.folder
-        classification_output = Path(self.config.paths.output) / "classification_output"
-
+        
+        # Use metrics_output_path as the root, with run subfolder
+        run_output_path = metrics_output_path / f"{self.clf_folder}" / f"run_{run + 1}"
+        os.makedirs(run_output_path, exist_ok=True)
+        
         # Collect all CSVs
         csv_files = list(feature_vector_path.glob("*.csv"))
         if not csv_files:
             raise FileNotFoundError(f"No feature vector files found in {feature_vector_path}")
         
-        task_accuracies = {}  # Store accuracy values for each task
+        task_accuracies = {}
+        task_metrics = []
 
-        # ----------------------------------------------------------------------
-        # STEP 1: Determine the intersection of IDs across all tasks.
-        # ----------------------------------------------------------------------
+        # STEP 1: Determine the intersection of IDs across all tasks
         common_ids: Set[str] = set()
         first_file = True
         for csv_file in csv_files:
             df_temp = pd.read_csv(csv_file)
-            # If first file, initialize the 'common_ids' set
             if first_file:
                 common_ids = set(df_temp["Id"])
                 first_file = False
             else:
-                # Intersect with new file's IDs
                 common_ids &= set(df_temp["Id"])
 
         if not common_ids:
@@ -146,32 +144,29 @@ class EnsemblePipeline:
         # Classification manager
         manager = ClassificationManager(
             feature_vector_path,
-            classification_output,
             n_runs=self.config.classification.n_runs,
             base_seed=seed
         )
 
-        aggregated_predictions = {}  # Store predictions per task
-        aggregated_confidences = {}  # Store confidence scores per task
-        all_ids = set()              # Collect IDs actually used in each test split
-        original_classes = None      # We'll store the reference y_test for merging
+        aggregated_predictions = {}
+        aggregated_confidences = {}
+        all_ids = set()
+        original_classes = None
 
         # Rich progress bar
         with Progress() as progress:
             task = progress.add_task("[cyan]Processing tasks...", total=len(csv_files))
 
             for csv_file in csv_files:
-                task_id = csv_file.stem.replace("_test_features", "")  # Normalize ID
+                task_id = csv_file.stem.replace("_test_features", "")
                 progress.update(task, description=f"[cyan]Processing {task_id}...")
 
                 # ------------------------------------------------------------------
-                # STEP 2: Load dataset, but keep only the rows with IDs in common.
+                # STEP 2: Load dataset, keep only rows with common IDs
                 # ------------------------------------------------------------------
                 full_df = pd.read_csv(csv_file)
-                # Filter to include only the intersection of IDs
                 full_df = full_df[full_df["Id"].isin(common_ids)]
 
-                # If after filtering we have empty data, raise an error
                 if full_df.empty:
                     self.printer.print_warning(f"Task {task_id} has no common IDs. Skipping.")
                     raise ValueError(f"Task {task_id} has no valid data after ID intersection.")
@@ -180,16 +175,14 @@ class EnsemblePipeline:
                 y = full_df['Class']
 
                 # ------------------------------------------------------------------
-                # STEP 3: Instantiate and train the classifier for this task
+                # STEP 3: Train the classifier
                 # ------------------------------------------------------------------
                 classifier = get_classifier(
                     self.config.classification.classifier,
                     task_id,
-                    classification_output,
                     seed
                 )
 
-                # Train classifier: returns the fitted classifier, predictions, etc.
                 classifier, y_pred, y_proba, id_col_test, y_test = manager.train_classifier(
                     classifier,
                     X,
@@ -197,20 +190,38 @@ class EnsemblePipeline:
                     test_size=self.config.classification.test_size,
                     seed=seed
                 )
-                
+
+                # ------------------------------------------------------------------
+                # STEP 3.5: Compute metrics for this task
+                # ------------------------------------------------------------------
                 accuracy = np.mean(y_pred == y_test)
-                task_accuracies[task_id] = accuracy
+                task_accuracies[task_id] = accuracy  # Keep for return
+
+                # Calculate additional metrics
+                precision = precision_score(y_test, y_pred, average='binary', zero_division=0)
+                sensitivity = recall_score(y_test, y_pred, average='binary', zero_division=0)
+                tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+                mcc = matthews_corrcoef(y_test, y_pred)
+
+                # Store metrics for this task in task_metrics
+                task_metrics.append({
+                    'Task': task_id,
+                    'Accuracy': accuracy,
+                    'Precision': precision,
+                    'Sensitivity': sensitivity,
+                    'Specificity': specificity,
+                    'MCC': mcc
+                })
 
                 # Merge all IDs from the test set(s)
                 all_ids.update(id_col_test)
 
-                # We'll store the test labels the first time we see them,
-                # to keep a reference for merging later.
                 if original_classes is None:
                     original_classes = pd.DataFrame({"Id": id_col_test, "Class": y_test})
 
                 # ------------------------------------------------------------------
-                # STEP 4: Store predictions & confidences for each task
+                # STEP 4: Store predictions & confidences
                 # ------------------------------------------------------------------
                 predictions_df = pd.DataFrame({
                     "Id": id_col_test,
@@ -226,63 +237,47 @@ class EnsemblePipeline:
                 aggregated_confidences[task_id] = confidences_df
 
                 progress.update(task, advance=1)
-                
-                # if task_id == "T20":
-                #     break
 
         # ----------------------------------------------------------------------
-        # STEP 5: Merge into final DataFrame for predictions and confidences
-        # ----------------------------------------------------------------------
-        # Base structure: all unique IDs from every test split
+        # STEP 5: Merge into final DataFrames
+        # ------------------------------------------------------------------
         all_ids_df = pd.DataFrame({"Id": list(all_ids)})
-
-        # Merge predictions
         final_predictions_df = all_ids_df.copy()
         for task_id, df_pred in aggregated_predictions.items():
             final_predictions_df = final_predictions_df.merge(df_pred, on="Id", how="outer")
 
-        # Merge confidences
         final_confidences_df = all_ids_df.copy()
         for task_id, df_conf in aggregated_confidences.items():
             final_confidences_df = final_confidences_df.merge(df_conf, on="Id", how="outer")
 
-        # Merge with original class labels
         final_predictions_df = final_predictions_df.merge(original_classes, on="Id", how="left")
         final_confidences_df = final_confidences_df.merge(original_classes, on="Id", how="left")
 
-        # Path info for outputs
-        output_clf = classification_output / f"{classifier.get_classifier_name()}"
+        # Path info
         classifier_name = classifier.get_classifier_name()
 
-        # ----------------------------------------------------------------------
-        # STEP 6: Save results if requested
-        # ----------------------------------------------------------------------
-        if save_results:
-            os.makedirs(output_clf, exist_ok=True)
+        # STEP 6: Save results 
+        output_path_predictions = run_output_path / "Predictions.csv"
+        output_path_confidences = run_output_path / "Confidences.csv"
+        output_path_metrics = run_output_path / "Metrics.csv"
 
-            output_run = output_clf / f"run_{run + 1}"
-            os.makedirs(output_run, exist_ok=True)
+        final_predictions_df.to_csv(output_path_predictions, index=False)
+        final_confidences_df.to_csv(output_path_confidences, index=False)
 
-            output_path_predictions = output_run / "Predictions.csv"
-            output_path_confidences = output_run / "Confidences.csv"
+        metrics_df = pd.DataFrame(task_metrics).sort_values('Task').reset_index(drop=True)
+        metrics_df.to_csv(output_path_metrics, index=False)
 
-            final_predictions_df.to_csv(output_path_predictions, index=False)
-            final_confidences_df.to_csv(output_path_confidences, index=False)
+        if self.verbose:
+            self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
+            self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
+            self.printer.print_info(f"Task metrics saved to {output_path_metrics}")
 
-            if self.verbose:
-                self.printer.print_info(f"Aggregated predictions saved to {output_path_predictions}")
-                self.printer.print_info(f"Aggregated confidences saved to {output_path_confidences}")
-
-        # ----------------------------------------------------------------------
-        # STEP 7: Drop rows with missing Class (if any)
-        # ----------------------------------------------------------------------
+        # STEP 7: Drop rows with missing Class
         final_predictions_df = final_predictions_df.dropna(subset=["Class"])
         final_confidences_df = final_confidences_df.dropna(subset=["Class"])
-        
-        accuracy_df = pd.DataFrame([task_accuracies])
 
-        # # Optionally, to ensure a sorted column order (T01, T02, T03, …):
-        # accuracy_df = accuracy_df.reindex(sorted(accuracy_df.columns), axis=1)
+        # STEP 8: Create accuracy_df for return
+        accuracy_df = pd.DataFrame([task_accuracies]).reindex(sorted(task_accuracies.keys()), axis=1)
 
         return final_predictions_df, final_confidences_df, classifier_name, accuracy_df
 

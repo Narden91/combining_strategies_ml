@@ -36,7 +36,9 @@ def main(cfg: DictConfig) -> None:
                 
             # Handle classification or load existing data
             if cfg.classification.enabled:
-                predictions_df, confidence_df, classifier_name, acc_df = pipeline.run_classification(run, run_seed, cfg.settings.save_individual_results)
+                metrics_output_path = Path(cfg.paths.output) / f"{cfg.data.dataset}"/ f"ClassificationML" 
+                metrics_output_path.mkdir(parents=True, exist_ok=True)
+                predictions_df, confidence_df, classifier_name, acc_df = pipeline.run_classification(run, run_seed, metrics_output_path)
             else:
                 predictions_df, confidence_df, acc_df = pipeline.load_data()
                                 
@@ -63,22 +65,22 @@ def main(cfg: DictConfig) -> None:
         
         # Save aggregated metrics CSV
         if cfg.classification.enabled:
-            metrics_output_path = Path(cfg.paths.output) / f"{cfg.data.dataset}"/ f"ClassificationML" 
-            metrics_output_path.mkdir(parents=True, exist_ok=True)
-            metrics_output_path = metrics_output_path / f"Metrics_{classifier_name}_ALL_METHODS.csv"
+            final_metrics_path = metrics_output_path / f"Metrics_{classifier_name}_ALL_METHODS.csv"
         else:
             metrics_output_path = Path(cfg.paths.output) / f"{cfg.data.dataset}"/ f"Ensemble" 
             metrics_output_path.mkdir(parents=True, exist_ok=True)
-            metrics_output_path = metrics_output_path / f"Metrics_ALL_METHODS.csv"
+            final_metrics_path = metrics_output_path / f"Metrics_ALL_METHODS.csv"
 
         grouped = all_metrics_df.groupby("Method")
-        
-        final_metrics_df = grouped.apply(append_mean_std_for_method).reset_index(drop=True)
+        final_metrics_df = grouped.apply(
+            lambda x: append_mean_std_for_method(x, x.name),
+            include_groups=False
+        ).reset_index(drop=True)
 
-        final_metrics_df.to_csv(metrics_output_path, index=False)
+        final_metrics_df.to_csv(final_metrics_path, index=False)
 
         if cfg.settings.verbose:
-            printer.print_info(f"Aggregated metrics saved to {metrics_output_path}")
+            printer.print_info(f"Aggregated metrics saved to {final_metrics_path}")
 
         printer.print_footer(success=True)
         return 0

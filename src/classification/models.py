@@ -28,8 +28,8 @@ class SVMClassifier(TunedClassifierMixin, BaseClassifier):
     on smaller subsets of data first.
     """
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = SVC(probability=True, random_state=random_state)
         self.verbose = verbose
         self.feature_names = None  # Store feature names
@@ -71,8 +71,8 @@ class RFClassifier(TunedClassifierMixin, BaseClassifier):
     efficient parameter optimization.
     """
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = SklearnRF(random_state=random_state)
         self.verbose = verbose
         self.feature_names = None  # Store feature names
@@ -113,8 +113,8 @@ class NeuralNetworkClassifier(TunedClassifierMixin, BaseClassifier):
     testing both single and double hidden layer configurations with various sizes.
     """
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = MLPClassifier(max_iter=1000, random_state=random_state)
         self.verbose = verbose
         self.feature_names = None  # Store feature names
@@ -155,8 +155,8 @@ class KNNClassifier(TunedClassifierMixin, BaseClassifier):
     of parameters for the specific dataset.
     """
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = KNeighborsClassifier()
         self.verbose = verbose
         self.feature_names = None  # Store feature names
@@ -187,8 +187,8 @@ class KNNClassifier(TunedClassifierMixin, BaseClassifier):
 class XGBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """XGBoost classifier implementation with hyperparameter tuning."""
 
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = XGBClassifier(
             random_state=random_state,
             eval_metric='logloss'
@@ -223,8 +223,8 @@ class XGBoostClassifier(TunedClassifierMixin, BaseClassifier):
 class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """CatBoost classifier implementation with hyperparameter tuning."""
 
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = catboost.CatBoostClassifier(
             random_state=random_state,
             thread_count=-1,  # Use all CPU cores
@@ -264,8 +264,8 @@ class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
 class DecisionTreeClassifier(TunedClassifierMixin, BaseClassifier):
     """Decision Tree classifier implementation with hyperparameter tuning."""
 
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = sklearn.tree.DecisionTreeClassifier(random_state=random_state)
         self.verbose = verbose
         self.feature_names = None  # Store feature names
@@ -297,8 +297,8 @@ class DecisionTreeClassifier(TunedClassifierMixin, BaseClassifier):
 class AdaBoostClassifier(TunedClassifierMixin, BaseClassifier):
     """AdaBoost classifier implementation with hyperparameter tuning."""
     
-    def __init__(self, task_id: str, output_dir: Path, random_state: int = 42, verbose: bool = False):
-        super().__init__(task_id, output_dir, random_state)
+    def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+        super().__init__(task_id, random_state)
         self.model = sklearn.ensemble.AdaBoostClassifier(random_state=random_state)
         self.verbose = verbose
         self.feature_names = None  # Store feature names for inference
@@ -327,7 +327,7 @@ class AdaBoostClassifier(TunedClassifierMixin, BaseClassifier):
         return self.model.predict_proba(X)
     
     
-def get_classifier(classifier_type: str, task_id: str, output_dir: Path, 
+def get_classifier(classifier_type: str, task_id: str,
                   random_state: int = 42, verbose: bool = False) -> BaseClassifier:
     """
     Factory function to get classifier instance.
@@ -335,7 +335,6 @@ def get_classifier(classifier_type: str, task_id: str, output_dir: Path,
     Args:
         classifier_type: Type of classifier ('svm', 'rf', 'nn', 'knn', 'xgb', 'catboost', 'dt', 'ada')
         task_id: Task identifier
-        output_dir: Output directory for results
         random_state: Random seed for reproducibility
         verbose: Whether to print detailed information
         
@@ -360,4 +359,4 @@ def get_classifier(classifier_type: str, task_id: str, output_dir: Path,
         raise ValueError(f"Unknown classifier type: {classifier_type}. "
                         f"Available types: {list(classifiers.keys())}")
                         
-    return classifiers[classifier_type](task_id, output_dir, random_state, verbose)
+    return classifiers[classifier_type](task_id, random_state, verbose)
