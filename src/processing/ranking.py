@@ -158,7 +158,7 @@ def ranking(predictions_df: pd.DataFrame, accuracy_df: pd.DataFrame, verbose: bo
     # Handle NaN values: Fill with the most common class or fallback to 0
     if result_df['predicted_class'].isna().any():
         most_common_class = result_df['predicted_class'].mode().iloc[0] if not result_df['predicted_class'].mode().empty else 0
-        result_df['predicted_class'].fillna(most_common_class, inplace=True)
+        result_df['predicted_class'] = result_df['predicted_class'].fillna(most_common_class)
 
     # Convert to integer
     result_df['predicted_class'] = result_df['predicted_class'].astype(int)

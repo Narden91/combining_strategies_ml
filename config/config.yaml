@@ -3,22 +3,22 @@ paths:
   output: ${hydra:runtime.cwd}/Results
 
 data:
-  dataset: EfficientNetV2S # EfficientNetV2S_features
+  dataset: ResNet50 # ConvNeXtSmall_features
   predictions:
-    file_name: EfficientNetV2S_predictions.csv # predictions_data.csv
+    file_name: ResNet50_predictions.csv # predictions_data.csv
     encoding: utf-8
     separator: ","
 
   confidence:
-    file_name: EfficientNetV2S_confidence_degrees.csv  #confidence_degrees.csv
+    file_name: ResNet50_confidence_degrees.csv  #confidence_degrees.csv
     encoding: utf-8
     separator: ","
   
   feature_vector:
-    folder: EfficientNetV2S_features
+    folder: ResNet50_features
   
   validation_acc:
-    filename: EfficientNetV2S_val_acc.csv
+    filename: ResNet50_val_acc.csv
     encoding: utf-8
     separator: ","
 
@@ -29,7 +29,7 @@ settings:
 
 classification:
   enabled: true          # Whether to run classification before ensemble
-  classifier: knn        # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
+  classifier: rf        # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.3         # Proportion of data to use for testing
   n_runs: 20             # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility
