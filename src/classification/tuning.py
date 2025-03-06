@@ -58,13 +58,15 @@ class ExtendedSearchSpace(SearchSpace):
         'min_child_weight': list(range(1, 7))
     }
     
-    # catboost_space = {
-    #     'iterations': SearchSpace._create_randint(100, 500),
-    #     'depth': list(range(4, 11)),
-    #     'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
-    #     'l2_leaf_reg': SearchSpace._create_uniform(1.0, 10.0),
-    #     'subsample': SearchSpace._create_uniform(0.6, 1.0)
-    # }
+    xgb_rf_space = {
+        'n_estimators': SearchSpace._create_randint(50, 300),
+        'max_depth': list(range(3, 11)),
+        'learning_rate': SearchSpace._create_uniform(0.01, 0.3),
+        'subsample': SearchSpace._create_uniform(0.6, 1.0),
+        'colsample_bytree': SearchSpace._create_uniform(0.6, 1.0),
+        'min_child_weight': list(range(1, 7)),
+        'bootstrap': [True, False]
+    }
     
     catboost_space = {
         'iterations': (100, 500),  # Reduced upper bound

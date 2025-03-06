@@ -29,7 +29,7 @@ settings:
 
 classification:
   enabled: true          # Whether to run classification before ensemble
-  classifier: xgb        # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
+  classifier: rf         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.3         # Proportion of data to use for testing
-  n_runs: 20             # Number of runs with different seeds
+  n_runs: 2             # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility

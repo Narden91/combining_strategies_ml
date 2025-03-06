@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier as SklearnRF
 from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from classification.base import BaseClassifier
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier, XGBRFClassifier
 from catboost import CatBoostClassifier
 from classification.tuning import ExtendedSearchSpace, TunedClassifierMixin, SearchSpace
 import warnings
@@ -59,46 +59,77 @@ class SVMClassifier(TunedClassifierMixin, BaseClassifier):
 
 class RFClassifier(TunedClassifierMixin, BaseClassifier):
     """
-    Random Forest classifier implementation with hyperparameter tuning.
-    
-    Uses a Random Forest ensemble, optimizing the following parameters:
-    - n_estimators: Number of trees in the forest (50-300)
-    - max_depth: Maximum depth of trees (5-30 or None)
-    - min_samples_split: Minimum samples required to split a node (2-10)
-    - min_samples_leaf: Minimum samples required at a leaf node (1-4)
-    
-    Includes automatic hyperparameter tuning using Halving Random Search for
-    efficient parameter optimization.
+    Random Forest classifier implementation using XGBoost's XGBRFClassifier.
     """
-    
+
     def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, random_state)
-        self.model = SklearnRF(random_state=random_state)
+        self.model = XGBRFClassifier(random_state=random_state, eval_metric='logloss')
         self.verbose = verbose
-        self.feature_names = None  # Store feature names
+        self.feature_names = None
 
     def get_classifier_name(self) -> str:
         return "random_forest"
 
     def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
-        """Ensure feature names are stored during training."""
-        X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
-        self.feature_names = X.columns  # Store feature names
+        self.feature_names = X.columns
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.tune_hyperparameters(X, y, SearchSpace.rf_space, verbose=self.verbose)
+            self.tune_hyperparameters(X, y, ExtendedSearchSpace.xgb_rf_space, verbose=self.verbose)
+
         self.model.fit(X, y)
 
     def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
-        """Ensure inference uses stored feature names."""
-        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
+        X = pd.DataFrame(X, columns=self.feature_names)
         return self.model.predict(X)
 
     def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
-        """Ensure probability prediction uses stored feature names."""
-        X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
+        X = pd.DataFrame(X, columns=self.feature_names)
         return self.model.predict_proba(X)
+    
+# class RFClassifier(TunedClassifierMixin, BaseClassifier):
+#     """
+#     Random Forest classifier implementation with hyperparameter tuning.
+    
+#     Uses a Random Forest ensemble, optimizing the following parameters:
+#     - n_estimators: Number of trees in the forest (50-300)
+#     - max_depth: Maximum depth of trees (5-30 or None)
+#     - min_samples_split: Minimum samples required to split a node (2-10)
+#     - min_samples_leaf: Minimum samples required at a leaf node (1-4)
+    
+#     Includes automatic hyperparameter tuning using Halving Random Search for
+#     efficient parameter optimization.
+#     """
+    
+#     def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
+#         super().__init__(task_id, random_state)
+#         self.model = SklearnRF(random_state=random_state)
+#         self.verbose = verbose
+#         self.feature_names = None  # Store feature names
+
+#     def get_classifier_name(self) -> str:
+#         return "random_forest"
+
+#     def _fit_implementation(self, X: pd.DataFrame, y: pd.Series) -> None:
+#         """Ensure feature names are stored during training."""
+#         X = pd.DataFrame(X, columns=X.columns)  # Ensure DataFrame
+#         self.feature_names = X.columns  # Store feature names
+
+#         with warnings.catch_warnings():
+#             warnings.simplefilter("ignore")
+#             self.tune_hyperparameters(X, y, SearchSpace.rf_space, verbose=self.verbose)
+#         self.model.fit(X, y)
+
+#     def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
+#         """Ensure inference uses stored feature names."""
+#         X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
+#         return self.model.predict(X)
+
+#     def _predict_proba_implementation(self, X: pd.DataFrame) -> np.ndarray:
+#         """Ensure probability prediction uses stored feature names."""
+#         X = pd.DataFrame(X, columns=self.feature_names)  # Restore feature names
+#         return self.model.predict_proba(X)
 
 class NeuralNetworkClassifier(TunedClassifierMixin, BaseClassifier):
     """
@@ -225,15 +256,30 @@ class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
 
     def __init__(self, task_id: str, random_state: int = 42, verbose: bool = False):
         super().__init__(task_id, random_state)
+        # self.model = catboost.CatBoostClassifier(
+        #     random_state=random_state,
+        #     task_type='GPU', #if catboost.utils.get_gpu_device_count() > 0 else 'CPU',
+        #     devices='0',  # Use first GPU
+        #     thread_count=-1,  # Use all CPU cores
+        #     early_stopping_rounds=20,
+        #     od_type='Iter',
+        #     bootstrap_type='Poisson',
+        #     verbose=False        
+        # )
         self.model = catboost.CatBoostClassifier(
-            random_state=random_state,
-            thread_count=-1,  # Use all CPU cores
-            early_stopping_rounds=20,
-            od_type='Iter',
-            bootstrap_type='Bernoulli',
+            task_type='GPU',
+            devices='0',
+            iterations=500,                   # Lower if you don't need extreme precision
+            depth=6,                          # Max depth between 4-6 usually gives faster training
+            learning_rate=0.1,                # Moderate learning rate
+            bootstrap_type='Poisson',         # Optimal for GPU training
+            subsample=0.8,                    # Slightly smaller sample improves speed
+            random_strength=1,                # Regularization to speed up
+            early_stopping_rounds=50,         # Stop early to prevent overfitting
             verbose=False,
-            task_type='CPU'  # Explicit CPU usage
+            random_state=random_state
         )
+
         self.verbose = verbose
         self.feature_names = None
 
@@ -247,7 +293,7 @@ class CatBoostClassifier(TunedClassifierMixin, BaseClassifier):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.tune_hyperparameters(X, y, ExtendedSearchSpace.catboost_space, verbose=self.verbose)
+            # self.tune_hyperparameters(X, y, ExtendedSearchSpace.catboost_space, verbose=self.verbose)
         self.model.fit(X, y)
 
     def _predict_implementation(self, X: pd.DataFrame) -> np.ndarray:
