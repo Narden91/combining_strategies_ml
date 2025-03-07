@@ -3,22 +3,22 @@ paths:
   output: ${hydra:runtime.cwd}/Results
 
 data:
-  dataset: InceptionV3 # InceptionV3_features
+  dataset: ResNet50 # ResNet50_features
   predictions:
-    file_name: InceptionV3_predictions.csv # predictions_data.csv
+    file_name: offline_ResNet50.csv # ResNet50_predictions.csv
     encoding: utf-8
     separator: ","
 
   confidence:
-    file_name: InceptionV3_confidence_degrees.csv  #confidence_degrees.csv
+    file_name: ResNet50_confidence_degrees.csv  #confidence_degrees.csv
     encoding: utf-8
     separator: ","
   
   feature_vector:
-    folder: InceptionV3_features
+    folder: ResNet50_features
   
   validation_acc:
-    filename: InceptionV3_val_acc.csv
+    filename: ResNet50_val_acc.csv
     encoding: utf-8
     separator: ","
 
@@ -28,8 +28,8 @@ settings:
   save_individual_results: false
 
 classification:
-  enabled: true          # Whether to run classification before ensemble
+  enabled: false          # Whether to run classification before ensemble
   classifier: rf         # Options: rf, nn, knn, xgb | svm, catboost, dt, or ada
   test_size: 0.3         # Proportion of data to use for testing
-  n_runs: 2             # Number of runs with different seeds
+  n_runs: 1             # Number of runs with different seeds
   base_seed: 42          # Base random seed for reproducibility

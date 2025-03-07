@@ -14,7 +14,7 @@ def majority_voting(predictions_df: pd.DataFrame, verbose: bool = False) -> pd.D
     Returns:
         pd.DataFrame: DataFrame with 'Id' and predicted 'Class'
     """
-    print("[bold green]Executing Weighted Majority Voting[/bold green]")
+    print("[bold green]Executing Majority Voting[/bold green]")
     # Identify the task prediction columns (T columns)
     task_columns = [col for col in predictions_df.columns if col.startswith('T')]
 

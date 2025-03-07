@@ -22,3 +22,4 @@ catboost_info/
 Results/
 Results_*
 __pycache__/
+*.csv
