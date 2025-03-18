@@ -3,22 +3,22 @@ paths:
   output: ${hydra:runtime.cwd}/Results
 
 data:
-  dataset: ResNet50 # ResNet50_features
+  dataset: InceptionV3 # InceptionV3_features
   predictions:
-    file_name: offline_ResNet50.csv # ResNet50_predictions.csv
+    file_name: offline_InceptionV3.csv # InceptionV3_predictions.csv
     encoding: utf-8
     separator: ","
 
   confidence:
-    file_name: ResNet50_confidence_degrees.csv  #confidence_degrees.csv
+    file_name: InceptionV3_confidence_degrees.csv  #confidence_degrees.csv
     encoding: utf-8
     separator: ","
   
   feature_vector:
-    folder: ResNet50_features
+    folder: InceptionV3_features
   
   validation_acc:
-    filename: ResNet50_val_acc.csv
+    filename: InceptionV3_val_acc.csv
     encoding: utf-8
     separator: ","
 
